@@ -1,0 +1,26 @@
+# Isolated parser only. Does not start or alter StackPlan services/databases.
+services:
+  docling:
+    image: ghcr.io/docling-project/docling-serve-cpu@sha256:7a480a1604fa3b42efeddc7db9527690d9f9bc903226136013e2bfe6b1a4dfb0
+    ports:
+      - "127.0.0.1:15001:5001"
+    cpus: 2
+    mem_limit: 4g
+    environment:
+      OMP_NUM_THREADS: "2"
+  demo:
+    profiles: [demo]
+    build:
+      context: ../..
+      dockerfile: experiments/document_pipeline/Dockerfile
+    ports:
+      - "127.0.0.1:18766:18766"
+    environment:
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-}
+    depends_on:
+      - docling
+    volumes:
+      - documents:/data
+volumes:
+  documents:

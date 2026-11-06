@@ -1,0 +1,8 @@
+{
+  "name": "stackplan-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check static/app.js && node --check static/model.js && node --check static/api.js && node --check static/input-workspace.js"
+  }
+}

@@ -1,0 +1,14 @@
+.DS_Store
+.env
+.pytest_cache/
+.venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.coverage
+htmlcov/
+stackplan-result.json
+test-results/
+database/data/
+
+.ruff_cache/
