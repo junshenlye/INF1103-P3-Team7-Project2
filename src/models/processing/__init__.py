@@ -12,9 +12,11 @@ from .lifecycle import (
     transition_to,
 )
 from .document_task import DocumentOutcome, DocumentTask
+from .extraction_result import ExtractionResult
 from .processing_job import ProcessingJob
 from .lifecycle_policy import LifecyclePolicy
 from .project_snapshot import ProjectSnapshot
+from .submission_snapshot import SubmissionSnapshot
 
 __all__ = [
     "CREATED",
@@ -31,4 +33,6 @@ __all__ = [
     "ProcessingJob",
     "DocumentOutcome",
     "DocumentTask",
+    "ExtractionResult",
+    "SubmissionSnapshot",
 ]
