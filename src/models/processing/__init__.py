@@ -11,6 +11,7 @@ from .lifecycle import (
     can_transition,
     transition_to,
 )
+from .processing_job import ProcessingJob
 from .lifecycle_policy import LifecyclePolicy
 from .project_snapshot import ProjectSnapshot
 
@@ -26,4 +27,5 @@ __all__ = [
     "ProjectSnapshot",
     "can_transition",
     "transition_to",
+    "ProcessingJob",
 ]
