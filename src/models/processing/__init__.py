@@ -11,6 +11,7 @@ from .lifecycle import (
     can_transition,
     transition_to,
 )
+from .document_task import DocumentOutcome, DocumentTask
 from .processing_job import ProcessingJob
 from .lifecycle_policy import LifecyclePolicy
 from .project_snapshot import ProjectSnapshot
@@ -28,4 +29,6 @@ __all__ = [
     "can_transition",
     "transition_to",
     "ProcessingJob",
+    "DocumentOutcome",
+    "DocumentTask",
 ]
