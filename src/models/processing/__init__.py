@@ -18,6 +18,7 @@ from .lifecycle_policy import LifecyclePolicy
 from .project_snapshot import ProjectSnapshot
 from .submission_snapshot import SubmissionSnapshot
 from .checkpoint import DocumentCheckpoint
+from .review_transfer import ReviewTransfer
 
 __all__ = [
     "CREATED",
@@ -37,4 +38,5 @@ __all__ = [
     "ExtractionResult",
     "SubmissionSnapshot",
     "DocumentCheckpoint",
+    "ReviewTransfer",
 ]
