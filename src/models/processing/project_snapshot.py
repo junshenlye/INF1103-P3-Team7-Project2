@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from src.models.projects.module import Module
-from src.models.projects.project import Project
+if TYPE_CHECKING:
+    # Imported for annotations only. A runtime import would form a cycle:
+    # projects.project imports processing.lifecycle, which loads this package.
+    from src.models.projects.module import Module
+    from src.models.projects.project import Project
 
 
 @dataclass(frozen=True)
