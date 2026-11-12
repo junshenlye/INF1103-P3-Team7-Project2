@@ -20,6 +20,17 @@ class LogicManager:
         display = " ".join(value.split())
         return display, display.casefold()
 
+    def correct_assessment(self, original: dict, changes: object, week_count: int) -> dict:
+        """Apply reviewable changes and validate the resulting assessment facts."""
+        if not isinstance(changes, dict) or not changes or set(changes) - limits.REVIEW_FIELDS:
+            raise ProcessingError(
+                error_codes.INVALID_REQUEST,
+                "Only primitive assessment facts can be reviewed.",
+                "assessment",
+            )
+        corrected = {**original, **changes}
+        return self.validate_assessment_facts(corrected, week_count)
+
     def validate_project(self, raw: object) -> CreateProjectRequest:
         if not isinstance(raw, dict) or set(raw) != {"name", "week_count"}:
             raise ProcessingError(error_codes.INVALID_REQUEST, "Project metadata is incomplete.")
