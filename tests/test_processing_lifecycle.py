@@ -6,6 +6,7 @@ from src.models.processing.lifecycle import (
     CREATED,
     FAILED,
     INTERRUPTED,
+    PARTIAL,
     PROCESSING,
     READY,
     can_transition,
@@ -19,7 +20,7 @@ class ProcessingLifecycleTests(unittest.TestCase):
         self.assertEqual(transition_to(CREATED, PROCESSING), PROCESSING)
 
     def test_processing_can_reach_each_terminal_outcome(self):
-        for status in (READY, FAILED, INTERRUPTED):
+        for status in (READY, PARTIAL, FAILED, INTERRUPTED):
             with self.subTest(status=status):
                 self.assertTrue(can_transition(PROCESSING, status))
                 self.assertEqual(transition_to(PROCESSING, status), status)
@@ -29,6 +30,7 @@ class ProcessingLifecycleTests(unittest.TestCase):
             (CREATED, READY),
             (READY, PROCESSING),
             (FAILED, PROCESSING),
+            (PARTIAL, PROCESSING),
             ("unknown", PROCESSING),
         ):
             with self.subTest(current=current, next_status=next_status):

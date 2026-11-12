@@ -9,10 +9,11 @@ from __future__ import annotations
 CREATED = "Created"
 PROCESSING = "Processing"
 READY = "Ready"
+PARTIAL = "Partial"
 FAILED = "Failed"
 INTERRUPTED = "Interrupted"
 
-TERMINAL_STATES = frozenset({READY, FAILED, INTERRUPTED})
+TERMINAL_STATES = frozenset({READY, PARTIAL, FAILED, INTERRUPTED})
 
 _ALLOWED_TRANSITIONS = {
     CREATED: frozenset({PROCESSING}),
