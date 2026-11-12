@@ -17,6 +17,7 @@ PACKAGES = (
     "src.models.documents",
     "src.models.processing",
     "src.models.projects",
+    "src.schemas",
     "src.serialization",
 )
 
