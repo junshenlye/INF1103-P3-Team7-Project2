@@ -1,4 +1,4 @@
-"""Processing lifecycle domain rules and outcome policy."""
+"""Processing lifecycle rules, policies and immutable read models."""
 
 from .lifecycle import (
     CREATED,
@@ -12,6 +12,7 @@ from .lifecycle import (
     transition_to,
 )
 from .lifecycle_policy import LifecyclePolicy
+from .project_snapshot import ProjectSnapshot
 
 __all__ = [
     "CREATED",
@@ -22,6 +23,7 @@ __all__ = [
     "READY",
     "TERMINAL_STATES",
     "LifecyclePolicy",
+    "ProjectSnapshot",
     "can_transition",
     "transition_to",
 ]
