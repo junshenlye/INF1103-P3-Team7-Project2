@@ -13,6 +13,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = (
     "src.config",
+    "src.errors",
     "src.models.assessments",
     "src.models.documents",
     "src.models.processing",
