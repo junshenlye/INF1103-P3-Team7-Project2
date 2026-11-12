@@ -1,0 +1,16 @@
+# Local secrets and environment
+.env
+.venv/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Coverage output
+.coverage
+htmlcov/
+
+# Operating system files
+.DS_Store
