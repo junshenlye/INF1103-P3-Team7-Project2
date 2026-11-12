@@ -1,4 +1,4 @@
-"""Processing lifecycle rules, policies and immutable read models."""
+"""Processing lifecycle rules, policies, checkpoints and immutable read models."""
 
 from .lifecycle import (
     CREATED,
@@ -17,6 +17,7 @@ from .processing_job import ProcessingJob
 from .lifecycle_policy import LifecyclePolicy
 from .project_snapshot import ProjectSnapshot
 from .submission_snapshot import SubmissionSnapshot
+from .checkpoint import DocumentCheckpoint
 
 __all__ = [
     "CREATED",
@@ -35,4 +36,5 @@ __all__ = [
     "DocumentTask",
     "ExtractionResult",
     "SubmissionSnapshot",
+    "DocumentCheckpoint",
 ]
