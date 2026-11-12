@@ -49,6 +49,80 @@ class LogicManager:
             raise ProcessingError(error_codes.INVALID_REQUEST, "Every upload must belong to exactly one module.")
         return tuple(modules)
 
+    def validate_extraction(self, raw, module, source_ids, week_count):
+        """Validate one extracted chunk and normalize each fact's citations."""
+        if not isinstance(raw, dict) or set(raw) != {
+            "module_title",
+            "assessments",
+            "uncertainties",
+        }:
+            raise ProcessingError(
+                error_codes.INVALID_EXTRACTION,
+                "Assessment extraction has an invalid shape.",
+                "module",
+                module_id=module.id,
+            )
+        if (
+            not isinstance(raw["module_title"], str)
+            or self._normalize_title(raw["module_title"])[1]
+            != module.normalized_title
+        ):
+            raise ProcessingError(
+                error_codes.INVALID_EXTRACTION,
+                "Extracted module identity does not match the submission.",
+                "module",
+                module_id=module.id,
+            )
+        records = raw["assessments"]
+        uncertainties = raw["uncertainties"]
+        if (
+            not isinstance(records, list)
+            or len(records) > limits.ASSESSMENTS_PER_CHUNK
+            or not isinstance(uncertainties, list)
+            or len(uncertainties) > limits.UNCERTAINTIES_PER_CHUNK
+            or any(
+                not isinstance(x, str) or len(x) > limits.UNCERTAINTY_LENGTH
+                for x in uncertainties
+            )
+        ):
+            raise ProcessingError(
+                error_codes.INVALID_EXTRACTION,
+                "Assessment extraction exceeds supported bounds.",
+                "module",
+                module_id=module.id,
+            )
+        source_ids = set(source_ids)
+        validated = []
+        for record in records:
+            if not isinstance(record, dict) or set(record) != limits.FACT_FIELDS | {
+                "key",
+                "evidence",
+            }:
+                raise ProcessingError(
+                    error_codes.INVALID_EXTRACTION,
+                    "An assessment has invalid fields.",
+                    "module",
+                    module_id=module.id,
+                )
+            self.validate_assessment_facts(record, week_count)
+            self.validate_source_references(record, source_ids)
+            validated.append(
+                {
+                    **record,
+                    "evidence": {
+                        k: sorted(set(v)) for k, v in record["evidence"].items()
+                    },
+                }
+            )
+        if len({r["key"] for r in validated}) != len(validated):
+            raise ProcessingError(
+                error_codes.INVALID_EXTRACTION,
+                "Assessment keys must be unique within an extraction.",
+                "module",
+                module_id=module.id,
+            )
+        return validated, list(uncertainties)
+
     def validate_assessment_facts(self, record: dict, week_count: int) -> dict:
         """Check one extracted assessment record against the schedule rules.
 
@@ -85,8 +159,8 @@ class LogicManager:
             weight is None
             or (
                 type(weight) in (int, float)
-                and math.isfinite(weight)
                 and 0 <= weight <= limits.WEIGHT_PERCENT
+                and math.isfinite(weight)
             ),
             "weight_percent",
             "use null or a number between 0 and 100",
