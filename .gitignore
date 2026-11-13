@@ -8,9 +8,11 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Coverage output
+# Coverage and generated test output
 .coverage
 htmlcov/
+stackplan-result.json
+test-results/
 
 # Operating system files
 .DS_Store
