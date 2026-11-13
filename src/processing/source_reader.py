@@ -405,7 +405,8 @@ class SourceReader:
             )
         return chunks
 
-    def provider_element(self, element):
+    @staticmethod
+    def provider_element(element):
         return {
             "id": element.id,
             "text": element.text,
