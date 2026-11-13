@@ -8,6 +8,7 @@ import re
 from src.config import limits
 from src.errors import error_codes
 from src.errors.processing_error import ProcessingError
+from src.models.assessments import Assessment, AssessmentCollection, Schedule
 from src.schemas.create_project_request import CreateProjectRequest
 from src.schemas.submit_module_request import SubmitModuleRequest
 
@@ -380,3 +381,27 @@ class LogicManager:
                 "module",
             )
         return records
+
+    def build_schedule(self, modules, assessments, week_count: int, project_id: str) -> Schedule:
+        """Build the project schedule from stored assessment rows.
+
+        Each row provides ``id``, ``result_id``, ``module_id``, ``facts`` and
+        ``evidence``, and may provide ``parent_assessment_id`` and
+        ``revision``. ``modules`` supply ``id``, ``module_title`` and
+        ``position`` for ordering and display.
+        """
+        assessment_objects = [
+            Assessment.create(
+                row["id"],
+                row["result_id"],
+                row["module_id"],
+                row["facts"],
+                row["evidence"],
+                row.get("parent_assessment_id"),
+                row.get("revision", 0),
+            )
+            for row in assessments
+        ]
+        return AssessmentCollection(assessment_objects).build_schedule(
+            modules, week_count, project_id
+        )
