@@ -25,6 +25,8 @@ class Settings:
     gpt_concurrency: int = 2
     document_workers: int = 3
     docling_url: str = "http://docling:5001"
+    request_bytes: int = limits.REQUEST_BYTES
+    document_bytes: int = limits.DOCUMENT_BYTES
 
     def __post_init__(self):
         if urlparse(self.database_url).scheme not in {"postgres", "postgresql"}:
@@ -45,6 +47,12 @@ class Settings:
             raise ValueError("GPT_CONCURRENCY must be between 1 and 8.")
         if not 1 <= self.document_workers <= 8:
             raise ValueError("DOCUMENT_WORKERS must be between 1 and 8.")
+        if (
+            type(self.document_bytes) is not int
+            or type(self.request_bytes) is not int
+            or not 0 < self.document_bytes <= self.request_bytes <= limits.REQUEST_BYTES
+        ):
+            raise ValueError("Invalid upload bounds.")
         for name, value in (("GPT_BASE_URL", self.gpt_base_url), ("DOCLING_URL", self.docling_url)):
             parsed = urlparse(value)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
