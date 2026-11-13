@@ -243,3 +243,75 @@ class LogicManager:
                     "module",
                 )
         return assessment
+
+    def validate_relationships(self, records: list[dict]) -> list[dict]:
+        """Check parent links and weight totals after assessment facts are combined."""
+        by_key = {r["key"]: r for r in records}
+        if len(by_key) != len(records):
+            raise ProcessingError(
+                error_codes.INVALID_EXTRACTION,
+                "Assessment keys must be unique before validating relationships.",
+                "module",
+            )
+        children = {key: [] for key in by_key}
+        roots = []
+        for record in records:
+            parent = record["parent_key"]
+            if parent is None:
+                roots.append(record["key"])
+            elif parent not in by_key or by_key[parent]["kind"] != "group":
+                raise ProcessingError(
+                    error_codes.INVALID_EXTRACTION,
+                    "An assessment parent is missing or invalid.",
+                    "module",
+                )
+            else:
+                children[parent].append(record["key"])
+        # Every valid relationship forms a rooted forest. Visit children before
+        # parents without Python recursion, even for deep provider output.
+        order = []
+        stack = list(roots)
+        while stack:
+            key = stack.pop()
+            order.append(key)
+            stack.extend(children[key])
+        if len(order) != len(records):
+            raise ProcessingError(
+                error_codes.INVALID_EXTRACTION,
+                "Assessment relationships contain a cycle.",
+                "module",
+            )
+        module_weights = {}
+        maximum = limits.WEIGHT_PERCENT + limits.WEIGHT_TOLERANCE
+        for key in reversed(order):
+            record = by_key[key]
+            module_total = sum(module_weights[child] for child in children[key])
+            group_total = sum(
+                by_key[child]["weight_percent"] or 0
+                for child in children[key]
+                if by_key[child]["weight_scope"] == "group"
+            )
+            weight = record["weight_percent"]
+            if record["weight_scope"] == "module" and weight is not None:
+                if module_total > weight + limits.WEIGHT_TOLERANCE:
+                    raise ProcessingError(
+                        error_codes.INVALID_EXTRACTION,
+                        "Child assessment weights exceed their parent total.",
+                        "module",
+                    )
+                module_weights[key] = weight
+            else:
+                module_weights[key] = module_total
+            if group_total > maximum:
+                raise ProcessingError(
+                    error_codes.INVALID_EXTRACTION,
+                    "Assessment group weights exceed 100 percent.",
+                    "module",
+                )
+        if sum(module_weights[key] for key in roots) > maximum:
+            raise ProcessingError(
+                error_codes.INVALID_EXTRACTION,
+                "Assessment module weights exceed 100 percent.",
+                "module",
+            )
+        return records
