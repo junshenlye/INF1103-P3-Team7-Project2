@@ -3,6 +3,7 @@
 from dataclasses import FrozenInstanceError, asdict
 import unittest
 
+from src.config.limits import DOCUMENT_NAME_LENGTH
 from src.models.documents.source_element import SourceElement
 from src.models.documents.staged_document import StagedDocument
 
@@ -33,6 +34,23 @@ class StagedDocumentTests(unittest.TestCase):
             (staged.final_key, staged.media_type, staged.size, staged.checksum),
             ("", "", 0, ""),
         )
+
+    def test_normalizes_browser_filenames(self):
+        for filename, expected in (
+            ("../../brief.pdf", "brief.pdf"),
+            (r"C:\fakepath\brief.png", "brief.png"),
+            ("brief\x00\n.jpeg", "brief.jpeg"),
+            ("folder/..", "document"),
+            ("folder/", "document"),
+        ):
+            with self.subTest(filename=filename):
+                staged = StagedDocument("r", "d", filename, ".staging/r/d")
+                self.assertEqual(staged.filename, expected)
+                self.assertEqual(staged.staging_key, ".staging/r/d")
+
+    def test_shortens_long_names_and_preserves_supported_extension(self):
+        staged = StagedDocument("r", "d", "x" * DOCUMENT_NAME_LENGTH + ".JPEG", ".staging/r/d")
+        self.assertEqual(staged.filename, "x" * (DOCUMENT_NAME_LENGTH - 5) + ".JPEG")
 
     def test_records_progress_and_completion_details(self):
         staged = StagedDocument("request-1", "document-1", "outline.pdf", ".staging/r/d")
