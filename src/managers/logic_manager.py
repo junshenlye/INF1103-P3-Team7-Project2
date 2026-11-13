@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import math
 import re
 
 from src.config import limits
 from src.errors import error_codes
 from src.errors.processing_error import ProcessingError
+from src.models.processing.review_transfer import ReviewTransfer
 from src.schemas.create_project_request import CreateProjectRequest
 from src.schemas.submit_module_request import SubmitModuleRequest
 
@@ -30,6 +32,73 @@ class LogicManager:
             )
         corrected = {**original, **changes}
         return self.validate_assessment_facts(corrected, week_count)
+
+    def reconcile_reviews(
+        self,
+        records: list[dict],
+        previous: list[dict],
+        source_ids,
+        week_count: int,
+    ) -> tuple[ReviewTransfer, ...]:
+        """Carry reviewed corrections onto a new extraction while their evidence survives.
+
+        ``records`` are the newly extracted assessments. ``previous`` are the
+        stored assessments of the earlier result, each with ``id``,
+        ``revision``, ``facts``, ``evidence``, ``original_facts`` and
+        ``original_evidence``. Only fields a reviewer changed are carried over;
+        new values for unreviewed fields are kept. Input records are not
+        modified.
+
+        Returns:
+            One ``ReviewTransfer`` per reviewed assessment.
+
+        Raises:
+            ProcessingError: ``revision_conflict`` when a reviewed assessment
+                disappeared or a correction cites a source that was replaced,
+                or ``invalid_extraction`` when the reconciled facts are invalid.
+        """
+        effective = {record["key"]: deepcopy(record) for record in records}
+        transfers = []
+        for old in previous:
+            if not old["revision"]:
+                continue
+            key = old["facts"]["key"]
+            if key not in effective:
+                raise ProcessingError(
+                    error_codes.REVISION_CONFLICT,
+                    "A reviewed assessment changed identity. "
+                    "Review the affected module before publication.",
+                    "module",
+                )
+            record = effective[key]
+            for field in limits.FACT_FIELDS:
+                if old["facts"][field] == old["original_facts"][field] and old["evidence"].get(
+                    field, []
+                ) == old["original_evidence"].get(field, []):
+                    continue
+                citations = old["evidence"].get(field, [])
+                if any(source_id not in source_ids for source_id in citations):
+                    raise ProcessingError(
+                        error_codes.REVISION_CONFLICT,
+                        "A correction cites replaced source evidence. "
+                        "Review its evidence before publication.",
+                        "module",
+                    )
+                record[field] = deepcopy(old["facts"][field])
+                record["evidence"][field] = list(citations)
+            self.validate_assessment_facts(record, week_count)
+            self.validate_source_references(record, source_ids)
+            transfers.append(
+                ReviewTransfer(
+                    key,
+                    old["id"],
+                    old["revision"],
+                    {k: v for k, v in record.items() if k != "evidence"},
+                    deepcopy(record["evidence"]),
+                )
+            )
+        self.validate_relationships(list(effective.values()))
+        return tuple(transfers)
 
     def validate_project(self, raw: object) -> CreateProjectRequest:
         if not isinstance(raw, dict) or set(raw) != {"name", "week_count"}:
