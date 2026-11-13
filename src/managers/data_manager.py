@@ -5,7 +5,9 @@ from uuid import uuid4
 from src.contracts.postgres_pool import PostgresPool
 from src.errors import error_codes as errors
 from src.errors.processing_error import ProcessingError
+from src.models.documents.document_reference import DocumentReference
 from src.models.processing.processing_event import ProcessingEvent
+from src.models.projects.module import Module
 from src.models.projects.project import Project
 from src.serialization.event_cursor import parse_event_cursor
 
@@ -76,3 +78,34 @@ class DataManager:
             ProcessingEvent(row["sequence"], row["kind"], row["payload"])
             for row in rows
         ]
+
+    def get_job_modules(self, job_id: str) -> list[Module]:
+        """Return a job's submitted modules in submission order."""
+        with self.pool.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id::text AS id, project_id::text AS project_id, job_id::text AS job_id,
+                       module_title, normalized_title, credit, position
+                FROM stackplan.modules
+                WHERE job_id = %s
+                ORDER BY position
+                """,
+                (job_id,),
+            ).fetchall()
+        return [Module(**row) for row in rows]
+
+    def get_processing_documents(self, job_id: str, module_id: str) -> list[DocumentReference]:
+        """Return document metadata for a module belonging to the job."""
+        with self.pool.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT document.id::text AS id, document.module_id::text AS module_id,
+                       document.filename, document.media_type, document.size, document.checksum
+                FROM stackplan.documents AS document
+                JOIN stackplan.modules AS module ON module.id = document.module_id
+                WHERE module.job_id = %s AND module.id = %s
+                ORDER BY document.id
+                """,
+                (job_id, module_id),
+            ).fetchall()
+        return [DocumentReference(**row) for row in rows]
