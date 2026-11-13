@@ -14,3 +14,6 @@ htmlcov/
 
 # Operating system files
 .DS_Store
+
+# Local database files
+database/data/
