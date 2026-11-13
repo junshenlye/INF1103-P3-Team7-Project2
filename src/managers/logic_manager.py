@@ -255,6 +255,60 @@ class LogicManager:
                 )
         return assessment
 
+    def merge_assessments(
+        self, records: list[dict], validate_relationships: bool = True
+    ) -> list[dict]:
+        """Combine records for the same assessment found in different chunks.
+
+        A fact missing from one record is filled from another, and the evidence
+        for each fact is the union of all citations. Two different non-null
+        values for the same fact are a conflict and are never silently
+        overwritten. Input records are not modified.
+
+        Returns:
+            One record per assessment key, ordered by key.
+
+        Raises:
+            ProcessingError: ``no_assessments`` when there are no records, or
+                ``invalid_extraction`` when sources disagree or the merged
+                relationships are invalid.
+        """
+        if not records:
+            raise ProcessingError(
+                error_codes.NO_ASSESSMENTS,
+                "No assessment facts were found in this module.",
+                "module",
+            )
+        merged = {}
+        for record in records:
+            key = record["key"]
+            if key not in merged:
+                merged[key] = {
+                    **record,
+                    "evidence": {k: list(v) for k, v in record["evidence"].items()},
+                }
+                continue
+            existing = merged[key]
+            for field in limits.FACT_FIELDS:
+                old, new = existing[field], record[field]
+                if old is not None and new is not None and old != new:
+                    raise ProcessingError(
+                        error_codes.INVALID_EXTRACTION,
+                        "Sources disagree about an assessment fact.",
+                        "module",
+                    )
+                if old is None:
+                    existing[field] = new
+                existing["evidence"][field] = sorted(
+                    set(
+                        existing["evidence"].get(field, [])
+                        + record["evidence"].get(field, [])
+                    )
+                )
+        if validate_relationships:
+            self.validate_relationships(list(merged.values()))
+        return [merged[key] for key in sorted(merged)]
+
     def validate_relationships(self, records: list[dict]) -> list[dict]:
         """Check parent links and weight totals after assessment facts are combined."""
         by_key = {r["key"]: r for r in records}
