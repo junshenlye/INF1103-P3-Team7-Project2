@@ -19,6 +19,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                 "003_review_evidence.sql",
                 "004_fact_values.sql",
                 "005_document_progress.sql",
+                "006_document_recovery.sql",
             ],
         )
 
@@ -43,6 +44,27 @@ class DatabaseMigrationTests(unittest.TestCase):
         self.assertIn("INSERT INTO document_progress", progress)
         self.assertIn("'waiting'", progress)
         self.assertIn("'extracted'", progress)
+
+    def test_schema_supports_resumable_document_tasks(self):
+        recovery = (MIGRATIONS / "006_document_recovery.sql").read_text()
+
+        for table in (
+            "document_tasks",
+            "document_chunks",
+            "extraction_attempts",
+            "module_result_heads",
+            "processing_events",
+            "retry_requests",
+            "provider_permits",
+            "document_replacements",
+        ):
+            with self.subTest(table=table):
+                self.assertIn(f"CREATE TABLE {table}", recovery)
+        self.assertIn("CREATE TRIGGER document_enqueue", recovery)
+        self.assertIn("CREATE TRIGGER immutable_chunks", recovery)
+        self.assertIn("'Partial'", recovery)
+        self.assertIn("INSERT INTO document_tasks", recovery)
+        self.assertIn("INSERT INTO module_result_heads", recovery)
 
 
 if __name__ == "__main__":
