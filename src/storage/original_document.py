@@ -48,6 +48,16 @@ def open_verified_document(root: Path, document: Document) -> Iterator[BinaryIO]
         yield stream
 
 
+@contextmanager
+def open_original_chunks(root: Path, document: Document) -> Iterator[Iterator[bytes]]:
+    """Verify the original before yielding bounded chunks inside the context.
+
+    Exiting the context closes the file even if the caller stops reading early.
+    """
+    with open_verified_document(root, document) as stream:
+        yield iter(lambda: stream.read(STREAM_CHUNK_BYTES), b"")
+
+
 def _source_missing(document: Document) -> ProcessingError:
     return ProcessingError(
         SOURCE_MISSING,

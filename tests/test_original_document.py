@@ -8,7 +8,7 @@ from src.config.limits import STREAM_CHUNK_BYTES
 from src.errors.error_codes import SOURCE_MISSING
 from src.errors.processing_error import ProcessingError
 from src.models.documents.document import Document
-from src.storage.original_document import open_verified_document
+from src.storage.original_document import open_original_chunks, open_verified_document
 
 
 class VerifiedOriginalDocumentTests(unittest.TestCase):
@@ -64,3 +64,20 @@ class VerifiedOriginalDocumentTests(unittest.TestCase):
             with open_verified_document(self.root, self.document) as stream:
                 raise OSError("consumer error")
         self.assertTrue(stream.closed)
+
+    def test_streams_verified_original_in_bounded_chunks(self):
+        with open_original_chunks(self.root, self.document) as chunks:
+            self.assertEqual(list(chunks), [self.contents[:-1], self.contents[-1:]])
+
+    def test_rejects_corrupt_original_before_returning_chunks(self):
+        self.path.write_bytes(b"y" + self.contents[1:])
+        with self.assertRaises(ProcessingError) as caught:
+            with open_original_chunks(self.root, self.document):
+                self.fail("Corrupt content must be rejected before streaming.")
+        self.assertEqual(caught.exception.code, SOURCE_MISSING)
+
+    def test_closes_original_when_streaming_stops_early(self):
+        with open_original_chunks(self.root, self.document) as chunks:
+            self.assertEqual(next(chunks), self.contents[:-1])
+        with self.assertRaises(ValueError):
+            next(chunks)
