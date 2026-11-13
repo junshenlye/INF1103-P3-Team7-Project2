@@ -22,6 +22,16 @@ python -m unittest discover -s tests -v
 
 Run the command from the repository root. A successful run reports each test and ends with an `OK` summary.
 
+## Apply database migrations
+
+With the dependencies from `requirements.txt` installed and the settings from `.env.example` set in the environment, apply any pending PostgreSQL migrations from the repository root:
+
+```sh
+python -m src.migrate
+```
+
+Migrations in `database/migrations/` run in filename order inside one transaction, and already applied scripts are skipped, so the command is safe to repeat. It exits with status 1 and an error on stderr if settings are missing or invalid or a migration fails.
+
 ## Working with the models
 
 The package exposes related model types from their subpackages. For example:
