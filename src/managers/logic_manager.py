@@ -449,3 +449,35 @@ class LogicManager:
                 "module",
             )
         return records
+
+    def build_schedule(
+        self,
+        modules: list,
+        assessments: list[dict],
+        week_count: int,
+        project_id: str,
+    ):
+        """Build a deterministic schedule from published assessment records.
+
+        Assessment records are converted to their concrete domain types before
+        the collection applies each type's scheduling rules. The returned
+        schedule contains detached display data and leaves the input records
+        unchanged.
+        """
+        from src.models.assessments import Assessment, AssessmentCollection
+
+        assessment_objects = [
+            Assessment.create(
+                row["id"],
+                row["result_id"],
+                row["module_id"],
+                row["facts"],
+                row["evidence"],
+                row.get("parent_assessment_id"),
+                row.get("revision", 0),
+            )
+            for row in assessments
+        ]
+        return AssessmentCollection(assessment_objects).build_schedule(
+            modules, week_count, project_id
+        )
