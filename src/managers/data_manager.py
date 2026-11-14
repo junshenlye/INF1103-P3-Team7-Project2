@@ -10,7 +10,9 @@ from src.errors.processing_error import ProcessingError
 from src.models.documents.document_reference import DocumentReference
 from src.models.processing import lifecycle
 from src.models.processing.checkpoint import ModuleCheckpoint
+from src.models.processing.document_task import DocumentTask
 from src.models.processing.processing_event import ProcessingEvent
+from src.models.processing.processing_job import ProcessingJob
 from src.models.processing.project_snapshot import ProjectSnapshot
 from src.models.projects.module import Module
 from src.models.projects.project import Project
@@ -18,6 +20,7 @@ from src.schemas.job_status_response import JobStatusResponse
 from src.serialization.event_cursor import parse_event_cursor
 from src.storage.original_document import open_verified_document
 from src.storage.postgres_document_originals import PostgresDocumentOriginals
+from src.storage.postgres_job_records import require_live_lease
 
 
 class DataManager:
@@ -384,6 +387,41 @@ class DataManager:
                 (job_id,),
             ).fetchall()
         return [Module(**row) for row in rows]
+
+    def claim_document_task(self, job: ProcessingJob) -> DocumentTask | None:
+        """Claim the next queued, unreplaced document under the live job lease."""
+        with self.pool.connection() as connection, connection.transaction():
+            require_live_lease(connection, job)
+            row = connection.execute(
+                """
+                WITH next_task AS (
+                    SELECT task.document_id
+                    FROM stackplan.document_tasks AS task
+                    WHERE task.job_id = %s AND task.state = 'queued'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM stackplan.document_replacements AS replacement
+                          WHERE replacement.old_document_id = task.document_id
+                      )
+                    ORDER BY task.document_id
+                    LIMIT 1 FOR UPDATE OF task SKIP LOCKED
+                ), claimed AS (
+                    UPDATE stackplan.document_tasks AS task
+                    SET state = 'running', owner_token = %s, updated_at = clock_timestamp()
+                    FROM next_task WHERE task.document_id = next_task.document_id
+                    RETURNING task.document_id, task.generation
+                )
+                SELECT doc.id::text AS id, doc.module_id::text AS module_id, doc.filename,
+                       doc.media_type, doc.size, doc.checksum, claimed.generation
+                FROM claimed
+                JOIN stackplan.documents AS doc ON doc.id = claimed.document_id
+                """,
+                (job.id, job.lease_token),
+            ).fetchone()
+            if row is None:
+                return None
+            metadata = dict(row)
+            generation = metadata.pop("generation")
+            return DocumentTask(DocumentReference(**metadata), generation)
 
     def get_processing_documents(self, job_id: str, module_id: str) -> list[DocumentReference]:
         """Return document metadata for a module belonging to the job."""
