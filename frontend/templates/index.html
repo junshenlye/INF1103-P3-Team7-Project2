@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111416">
+  <meta name="description" content="Upload module assessments and receive an automatic weekly schedule.">
+  <title>Stackplan — Assessment schedule</title>
+  <link rel="stylesheet" href="/static/product.css?v=desktop-dark-2">
+  <link rel="stylesheet" href="/static/styles.css?v=document-progress-1">
+  <link rel="stylesheet" href="/static/input-workspace.css?v=desktop-dark-2">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="Stackplan home"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>stackplan</span></a>
+      <div class="project-picker">
+        <div class="saved-picker"><label class="sr-only" for="project-picker">Saved trimester</label><select id="project-picker" disabled><option>Open a saved trimester</option></select></div>
+        <button type="button" data-action="restart" class="new-project" id="new-project"><span aria-hidden="true">+</span> New trimester</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="app"><main id="main" tabindex="-1"><div class="loading" role="status"><span class="spinner" aria-hidden="true"></span><h1>Opening your workspace</h1></div></main></div>
+  <footer><a class="footer-brand" href="/">stackplan.</a><span>Plan the work. See the source.</span></footer>
+  <noscript><p class="message error">Enable JavaScript to upload screenshots and inspect your assessments.</p></noscript>
+  <script type="module" src="/static/app.js?v=document-progress-1"></script>
+</body>
+</html>

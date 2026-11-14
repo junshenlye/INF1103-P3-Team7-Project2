@@ -1,0 +1,14 @@
+export const weeks = Array.from({ length: 14 }, (_, i) => i + 1);
+export const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+export const assessments = module => (module.assessment_types || []).flatMap(group => (group.assessments || []).map(item => ({ ...item, group, module_title: module.module_title })));
+export function weekLabel(schedule) {
+  if (schedule?.kind === 'week') return `Week ${schedule.week}`;
+  if (schedule?.kind === 'week_range') return `Weeks ${schedule.start_week}–${schedule.end_week}`;
+  return schedule?.raw || 'Week unknown';
+}
+export function weightLabel(item, group = item.group) {
+  const value = item.weight_percent;
+  if (value == null) return group?.group_weight_percent != null ? `Individual weight unknown · ${group.group_weight_percent}% group total` : 'Weight unknown';
+  const scope = item.weight_scope === 'module' ? 'of module' : item.weight_scope_name || item.weight_scope || 'scope unknown';
+  return `${value}% ${scope}`;
+}
