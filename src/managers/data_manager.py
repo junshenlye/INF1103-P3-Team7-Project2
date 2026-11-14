@@ -7,11 +7,13 @@ from src.contracts.postgres_pool import PostgresPool
 from src.errors import error_codes as errors
 from src.errors.processing_error import ProcessingError
 from src.models.documents.document_reference import DocumentReference
+from src.models.processing import lifecycle
 from src.models.processing.checkpoint import ModuleCheckpoint
 from src.models.processing.processing_event import ProcessingEvent
 from src.models.processing.project_snapshot import ProjectSnapshot
 from src.models.projects.module import Module
 from src.models.projects.project import Project
+from src.schemas.job_status_response import JobStatusResponse
 from src.serialization.event_cursor import parse_event_cursor
 
 
@@ -61,6 +63,67 @@ class DataManager:
         if row is None:
             raise ProcessingError(errors.NOT_FOUND, "Project was not found.")
         return Project(**row)
+
+    def get_job_status(self, job_id: str) -> JobStatusResponse:
+        """Read job status, current document progress and issues in one snapshot."""
+        with self.pool.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT job.id::text AS id, job.project_id::text AS project_id,
+                       job.status, job.stage,
+                       COALESCE((
+                           SELECT jsonb_agg(jsonb_build_object(
+                               'document_id', document.id, 'module_id', module.id,
+                               'module_title', module.module_title, 'filename', document.filename,
+                               'state', COALESCE(progress.state, 'waiting')
+                           ) ORDER BY module.position, document.id)
+                           FROM stackplan.documents AS document
+                           JOIN stackplan.modules AS module ON module.id = document.module_id
+                           LEFT JOIN stackplan.document_progress AS progress
+                               ON progress.document_id = document.id
+                           WHERE module.job_id = job.id AND NOT EXISTS (
+                               SELECT 1 FROM stackplan.document_replacements AS replacement
+                               WHERE replacement.old_document_id = document.id
+                           )
+                       ), '[]'::jsonb) AS documents,
+                       COALESCE((
+                           SELECT jsonb_agg(jsonb_build_object(
+                               'code', issue.code, 'severity', issue.severity,
+                               'message', issue.message, 'scope', issue.scope,
+                               'job_id', issue.job_id, 'module_id', issue.module_id,
+                               'document_id', issue.document_id
+                           ) ORDER BY issue.code, issue.module_id, issue.document_id, issue.id)
+                           FROM stackplan.processing_issues AS issue
+                           WHERE issue.job_id = job.id AND NOT issue.resolved
+                       ), '[]'::jsonb) AS issues
+                FROM stackplan.processing_jobs AS job WHERE job.id = %s
+                """,
+                (job_id,),
+            ).fetchone()
+        if row is None:
+            raise ProcessingError(errors.NOT_FOUND, "Processing task was not found.")
+
+        status = row["status"]
+        documents = []
+        for saved in row["documents"]:
+            state = saved["state"]
+            if status == lifecycle.READY:
+                state = lifecycle.EXTRACTED
+            elif status in (lifecycle.FAILED, lifecycle.INTERRUPTED):
+                if state in (lifecycle.PARSING, lifecycle.EXTRACTING):
+                    state = status.lower()
+                elif state == "waiting":
+                    state = "not_processed"
+            documents.append({**saved, "state": state})
+
+        return JobStatusResponse(
+            row["id"], row["project_id"], status, row["stage"], row["issues"],
+            {
+                "total_documents": len(documents),
+                "extracted_documents": sum(d["state"] == lifecycle.EXTRACTED for d in documents),
+                "documents": documents,
+            },
+        )
 
     def get_project_snapshot(self, project_id: str) -> ProjectSnapshot:
         """Read project state and related records from one repeatable SQL snapshot."""
