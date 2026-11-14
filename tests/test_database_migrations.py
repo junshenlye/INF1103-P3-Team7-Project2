@@ -20,6 +20,7 @@ class DatabaseMigrationTests(unittest.TestCase):
                 "004_fact_values.sql",
                 "005_document_progress.sql",
                 "006_document_recovery.sql",
+                "007_lifecycle_consistency.sql",
             ],
         )
 
@@ -65,6 +66,19 @@ class DatabaseMigrationTests(unittest.TestCase):
         self.assertIn("'Partial'", recovery)
         self.assertIn("INSERT INTO document_tasks", recovery)
         self.assertIn("INSERT INTO module_result_heads", recovery)
+
+    def test_lifecycle_migration_guards_transitions_and_repairs_unfinished_tasks(self):
+        lifecycle = (MIGRATIONS / "007_lifecycle_consistency.sql").read_text()
+
+        self.assertIn("CREATE TABLE assessment_review_lineage", lifecycle)
+        self.assertIn("CREATE TRIGGER immutable_review_lineage", lifecycle)
+        self.assertIn("CREATE OR REPLACE FUNCTION enforce_project_transition()", lifecycle)
+        self.assertIn("CREATE OR REPLACE FUNCTION enforce_job_transition()", lifecycle)
+        self.assertIn("OLD.status IN ('Ready', 'Partial', 'Failed', 'Interrupted')", lifecycle)
+        self.assertIn("NEW.status IN ('Ready', 'Partial', 'Failed')", lifecycle)
+        self.assertIn("UPDATE document_tasks AS task", lifecycle)
+        self.assertIn("job.status IN ('Failed', 'Interrupted')", lifecycle)
+        self.assertIn("task.state IN ('queued', 'running')", lifecycle)
 
 
 if __name__ == "__main__":
