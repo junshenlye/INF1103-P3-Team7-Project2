@@ -21,6 +21,25 @@ An optional, standalone Python 3.12+ integration for querying this repository fr
 
    Keep one listener running for this bot token. It uses Telegram long polling and stores its update offset in the local `state.sqlite3` file so restarts do not normally replay old commands. The host must remain online for immediate replies.
 
+## Optional macOS login service
+
+On macOS, install the command listener as a per-user LaunchAgent so it starts at login and restarts if it exits:
+
+```sh
+python3 integrations/telegram_bot/install_macos.py
+```
+
+The installer requires the private `integrations/telegram_bot/.env` file. It copies only `bot.py` and that configuration into `~/Library/Application Support/TeamPRBot`, with private directory and file permissions, and registers a LaunchAgent for the current user. It uses the Python interpreter running the installer. No administrator privileges or public HTTP endpoint are required for command polling.
+
+Inspect or stop the service with:
+
+```sh
+python3 integrations/telegram_bot/install_macos.py --status
+python3 integrations/telegram_bot/install_macos.py --stop
+```
+
+Stopping removes the login agent but preserves the installed configuration and SQLite state. Re-run the installer after updating the bot or its configuration. The Mac must be awake, online, and logged in for immediate command replies. Do not run a second polling listener for the same bot token.
+
 ## Group commands
 
 - `/help` or `/start` — show the command list.
@@ -46,7 +65,7 @@ The handler verifies GitHub's SHA-256 signature, checks the repository, limits r
 python -m unittest discover -s integrations/telegram_bot -v
 ```
 
-Tests mock Telegram and GitHub and cover group restrictions, command output, event formatting, signed webhook requests, duplicate delivery suppression, and retry after a failed send. They do not contact external services or send real messages.
+Tests mock Telegram and GitHub and cover group restrictions, command output, event formatting, signed webhook requests, duplicate delivery suppression, and retry after a failed send. Installer tests mock `launchctl` and filesystem paths; they do not install a real macOS service or contact external services.
 
 ## Local state and secrets
 
