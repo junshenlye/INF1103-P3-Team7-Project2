@@ -18,9 +18,17 @@ False
 1.0
 >>> policy.delay(2, "45")
 30.0
+>>> policy.delay(1, "Wed, 21 Oct 2099 07:28:00 GMT")
+30.0
+>>> policy.delay(1, "Wed, 21 Oct 2015 07:28:00 GMT")
+0.0
+>>> policy.delay(2, "not-a-date")
+0.5
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 from src.errors import error_codes as errors
 
@@ -51,13 +59,25 @@ class RetryPolicy:
         return code == errors.PROVIDER_UNAVAILABLE and attempt < self.transient_attempts
 
     def delay(self, attempt: int, retry_after=None) -> float:
-        """Return a bounded Retry-After value or exponential backoff delay."""
+        """Return a bounded numeric or HTTP-date Retry-After value.
+
+        HTTP-date values are converted to a delay relative to the current UTC
+        time. Invalid values fall back to the normal exponential backoff.
+        """
         if attempt < 1:
             raise ValueError("Retry attempts are one-based.")
         if retry_after is not None and retry_after != "":
             try:
-                return min(self.max_delay, max(0.0, float(retry_after)))
+                seconds = float(retry_after)
             except (TypeError, ValueError, OverflowError):
-                pass
+                try:
+                    retry_at = parsedate_to_datetime(str(retry_after))
+                    if retry_at.tzinfo is None:
+                        retry_at = retry_at.replace(tzinfo=timezone.utc)
+                    seconds = (retry_at - datetime.now(timezone.utc)).total_seconds()
+                except (TypeError, ValueError, OverflowError, IndexError, OSError):
+                    seconds = None
+            if seconds is not None:
+                return min(self.max_delay, max(0.0, seconds))
         exponential = self.base_delay * (2 ** (attempt - 1))
         return min(self.max_delay, exponential)
