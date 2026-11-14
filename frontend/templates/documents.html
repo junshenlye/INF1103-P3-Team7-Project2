@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111416">
+  <title>Source traceability — Stackplan</title>
+  <script>const contextParams=new URLSearchParams(location.search);if(contextParams.get('embedded')==='1')document.documentElement.classList.add('context-preview');</script>
+  <link rel="stylesheet" href="/static/product.css?v=desktop-dark-2">
+  <link rel="stylesheet" href="/static/document-workspace.css?v=desktop-dark-2">
+</head>
+<body>
+  <a class="skip" href="#document-main">Skip to source</a>
+  <header class="doc-topbar"><a id="return-schedule" href="/">← Back to schedule</a><span>Source evidence</span></header>
+  <p id="status" role="status" hidden></p><p id="error" role="alert" hidden></p>
+  <div class="workspace">
+    <main class="document" id="document-main" tabindex="-1">
+      <div class="toolbar">
+        <div class="source-title"><select id="source-select" aria-label="Source document" hidden></select><span id="preview-title" class="filename">Document preview</span></div>
+        <a id="original" class="original-link" target="_blank" rel="noopener" aria-disabled="true">Open original</a><div id="page-controls" class="page-controls" hidden><button id="previous" aria-label="Previous page">‹</button><span id="page-number"></span><button id="next" aria-label="Next page">›</button></div>
+      </div>
+      <div class="canvas" id="canvas">
+        <div class="empty"><svg width="48" height="60" viewBox="0 0 48 60" fill="none" aria-hidden="true"><path d="M9 2h20l12 12v43H9zM29 2v14h12M16 28h18M16 36h18M16 44h11" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><h2>Source preview</h2><p>Add a PDF or image to inspect assessment evidence.</p></div>
+      </div>
+    </main>
+    <aside class="metadata">
+      <section id="details" hidden>
+        <div class="details-heading"><div><p class="small-label">Source traceability</p><h1 id="module-title"></h1></div></div>
+        <label class="sr-only" for="assessment-select">Assessment</label><select id="assessment-select" class="assessment-select" aria-label="Assessment"></select>
+        <h2 id="assessment-title"></h2>
+        <p class="detail-prompt">Choose a field to jump to the matching source.</p>
+        <div id="facts"></div><div id="source-links" class="note"></div><p id="source-precision" class="note" role="status" hidden></p><div id="source-text" class="note"></div>
+      </section>
+    </aside>
+  </div>
+  <script type="module" src="/static/document-workspace.js?v=desktop-dark-2"></script>
+</body>
+</html>
