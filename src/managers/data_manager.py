@@ -16,6 +16,7 @@ from src.models.projects.module import Module
 from src.models.projects.project import Project
 from src.schemas.job_status_response import JobStatusResponse
 from src.serialization.event_cursor import parse_event_cursor
+from src.storage.original_document import open_verified_document
 from src.storage.postgres_document_originals import PostgresDocumentOriginals
 
 
@@ -29,6 +30,46 @@ class DataManager:
     def open_original(self, document_id: str):
         """Open a verified original for the browser."""
         return self.document_originals.open_original(document_id)
+
+    def get_document_trace(self, document_id: str) -> dict:
+        """Read saved evidence and verify whether the original is still available."""
+        document = self.document_originals.get_document(document_id)
+        with self.pool.connection() as connection:
+            parse = connection.execute(
+                """
+                SELECT id::text AS id, document_id::text AS document_id, parser_version, chunk_count
+                FROM stackplan.parse_snapshots WHERE document_id = %s
+                """,
+                (document_id,),
+            ).fetchone()
+            elements = []
+            if parse is not None:
+                # The parse and its elements are saved together and are immutable.
+                elements = connection.execute(
+                    """
+                    SELECT id::text AS id, document_id::text AS document_id,
+                           parse_id::text AS parse_id, text, regions, context, position
+                    FROM stackplan.source_elements WHERE parse_id = %s ORDER BY position
+                    """,
+                    (parse["id"],),
+                ).fetchall()
+
+        try:
+            with open_verified_document(self.document_originals.document_directory, document):
+                original_available = True
+        except ProcessingError as error:
+            if error.code != errors.SOURCE_MISSING:
+                raise
+            original_available = False
+
+        return {
+            "document_id": document.id,
+            "filename": document.filename,
+            "checksum": document.checksum,
+            "original_available": original_available,
+            "parse": dict(parse) if parse is not None else None,
+            "elements": [dict(element) for element in elements],
+        }
 
     def get_health(self) -> dict[str, str]:
         """Check that PostgreSQL is reachable and the schema is migrated."""

@@ -115,6 +115,21 @@ class IOManager:
                 raise HTTPException(status_code=404) from exc
             return OriginalDocumentResponse(self.data.open_original(document_id))
 
+        @app.get("/api/documents/{document_id}/trace")
+        async def document_trace(document_id: str):
+            try:
+                document_id = str(UUID(document_id))
+            except ValueError as error:
+                raise HTTPException(status_code=404, detail="The document was not found.") from error
+
+            try:
+                trace = await run_in_threadpool(self.data.get_document_trace, document_id)
+            except ProcessingError as error:
+                if error.code != error_codes.NOT_FOUND:
+                    raise
+                raise HTTPException(status_code=404, detail=error.message) from error
+            return JSONResponse(trace, headers={"Cache-Control": "private, no-store"})
+
         @app.get("/api/projects")
         async def projects():
             return await run_in_threadpool(self.data.get_projects)
