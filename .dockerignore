@@ -10,6 +10,7 @@ node_modules
 database/data
 test-results
 .coverage
+htmlcov
 docs/
 samples/
 .vscode/
