@@ -1,12 +1,12 @@
 """HTTP boundary for the browser workspace and project dashboard."""
 
-from __future__ import annotations
-
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 from src.config import limits
+from src.errors import error_codes
 from src.errors.processing_error import ProcessingError
+from src.serialization.request_json import read_request_json
 
 
 class IOManager:
@@ -17,15 +17,17 @@ class IOManager:
         self.logic = logic_manager
         self.frontend = Path(frontend_directory or Path(__file__).parents[2] / "frontend")
 
-    def get_application(self):
+    def get_application(self, *, lifespan=None):
         from fastapi import FastAPI, HTTPException, Request
         from fastapi.responses import FileResponse, JSONResponse
+        from starlette.concurrency import run_in_threadpool
 
-        app = FastAPI(title="Stackplan", docs_url=None, redoc_url=None)
+        app = FastAPI(lifespan=lifespan, title="Stackplan", docs_url=None, redoc_url=None)
 
         @app.exception_handler(ProcessingError)
         async def domain_error(_request, error):
-            return JSONResponse({"issues": [{"code": error.code, "message": error.message, "scope": error.scope}]}, status_code=422)
+            status = 413 if error.code == error_codes.REQUEST_TOO_LARGE else 422
+            return JSONResponse({"issues": [{"code": error.code, "message": error.message, "scope": error.scope}]}, status_code=status)
 
         @app.get("/health")
         @app.get("/ready")
@@ -59,8 +61,14 @@ class IOManager:
 
         @app.post("/api/projects", status_code=201)
         async def create_project(request: Request):
-            command = self.logic.validate_project(await request.json())
-            return _json(self.data.create_project(command.name, command.week_count))
+            raw = await read_request_json(
+                request.headers.get("content-type", ""), request.stream()
+            )
+            command = self.logic.validate_project(raw)
+            project = await run_in_threadpool(
+                self.data.create_project, command.name, command.week_count
+            )
+            return _json(project)
 
         @app.get("/api/projects/{project_id}")
         async def project(project_id: str):
