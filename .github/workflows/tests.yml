@@ -1,4 +1,4 @@
-name: Python verification
+name: Python and frontend verification
 
 on:
   push:
@@ -22,6 +22,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Compile source and tests
         run: python -m compileall -q src tests
 
@@ -30,5 +35,8 @@ jobs:
           python -m pip install ruff==0.8.6
           ruff check --output-format=github src tests
 
-      - name: Run unit tests
+      - name: Run Python unit tests
         run: python -m unittest discover -s tests -v
+
+      - name: Run frontend checks
+        run: npm run check --prefix frontend
