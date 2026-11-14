@@ -10,7 +10,7 @@ from src.contracts.postgres_pool import PostgresPool
 from src.errors import error_codes as errors
 from src.errors.processing_error import ProcessingError
 from src.models.documents.document import Document
-from src.storage.original_document import open_verified_document
+from src.storage.original_document import open_original_chunks, open_verified_document
 
 
 class PostgresDocumentOriginals:
@@ -43,6 +43,13 @@ class PostgresDocumentOriginals:
                 document_id=document_id,
             )
         return Document(**row)
+
+    @contextmanager
+    def open_original(self, document_id: str) -> Iterator[tuple[Document, Iterator[bytes]]]:
+        """Return public-response metadata and bounded chunks for a verified original."""
+        document = self.get_document(document_id)
+        with open_original_chunks(self.document_directory, document) as chunks:
+            yield document, chunks
 
     @contextmanager
     def open_document(self, document_id: str) -> Iterator[BinaryIO]:
