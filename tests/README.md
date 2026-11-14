@@ -18,16 +18,16 @@ Without `requirements.txt` installed, the HTTP endpoint tests skip themselves (t
 python scripts/test.py
 ```
 
-It runs the steps below in order and stops at the first failure: compile, Ruff, the Python unit tests, the frontend checks, and all three browser regressions.
+It runs the steps below in order and stops at the first failure: compile, Ruff, Python and notifier unit tests, frontend checks, and all three browser regressions.
 
 ## Individual checks
 
 | What | Command | Notes |
 | --- | --- | --- |
-| Compile | `python -m compileall -q src tests` | Catches syntax errors in every module. |
-| Lint | `ruff check src tests` | Rules come from `pyproject.toml`. |
+| Compile | `python -m compileall -q src tests integrations/github_actions_notifier` | Catches syntax errors in every Python module. |
+| Lint | `ruff check src tests integrations/github_actions_notifier` | Rules come from `pyproject.toml`. |
 | Python unit tests | `python -m unittest discover -s tests -v` | No database or network needed. |
-| One Python test file | `python -m unittest tests.test_logic_manager -v` | Use the module name of any file in `tests/`. |
+| Telegram notifier tests | `python -m unittest discover -s integrations/github_actions_notifier -v` | Mocks GitHub and Telegram; never sends messages. |
 | Frontend checks | `npm run check --prefix frontend` | Syntax-checks the scripts, then runs `tests/frontend/*.test.mjs` with `node --test`. |
 | Loading browser regression | `npm run test:loading --prefix frontend` | Processing and loading screens in headless Chromium. |
 | Calendar browser regression | `npm run test:calendar --prefix frontend` | Calendar and list views, filters and mobile layout, using fixture API responses. |
@@ -49,6 +49,7 @@ Use a dedicated project name so the run never touches the containers or volumes 
 ## Where tests live
 
 - `tests/test_*.py`: Python unit tests using the standard-library `unittest` runner (`pytest` also collects them, as configured in `pytest.ini`).
+- `integrations/github_actions_notifier/test_watch.py`: isolated notifier tests with mocked remote services.
 - `tests/frontend/*.test.mjs`: frontend unit tests run by `node --test`.
 - `tests/frontend/loading.mjs`, `tests/frontend/calendar.mjs`, `tests/frontend/recovery.mjs`: Playwright browser regressions.
 

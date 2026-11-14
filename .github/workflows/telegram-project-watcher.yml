@@ -1,0 +1,73 @@
+name: Telegram PR and CI notifier
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - integrations/github_actions_notifier/watch.py
+      - integrations/github_actions_notifier/test_watch.py
+      - .github/workflows/telegram-project-watcher.yml
+  schedule:
+    - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+    inputs:
+      send_test:
+        description: Send one Telegram connection-test message
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  actions: read
+
+concurrency:
+  group: telegram-project-watcher
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SOURCE_REPOSITORY: junshenlye/INF1103-P3-Team7-Project2
+      GITHUB_TOKEN: ${{ github.token }}
+      SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      SEND_TEST: ${{ inputs.send_test }}
+    steps:
+      - name: Check out notifier code only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Test notifier logic
+        working-directory: integrations/github_actions_notifier
+        run: python3 -m unittest -v
+
+      - name: Restore notification state
+        if: ${{ env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: integrations/github_actions_notifier/.state
+          key: pr-watch-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: pr-watch-v1-
+
+      - name: Check source repository
+        if: ${{ env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' }}
+        working-directory: integrations/github_actions_notifier
+        run: |
+          if [ "$SEND_TEST" = "true" ]; then
+            python3 watch.py --test
+          else
+            python3 watch.py
+          fi
+
+      - name: Save notification state, including partially completed checks
+        if: ${{ always() && env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' && hashFiles('integrations/github_actions_notifier/.state/watch.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: integrations/github_actions_notifier/.state
+          key: pr-watch-v1-${{ github.run_id }}-${{ github.run_attempt }}
