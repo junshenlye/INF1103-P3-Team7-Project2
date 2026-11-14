@@ -22,6 +22,8 @@ python -m unittest discover -s tests -v
 
 Run the command from the repository root. A successful run reports each test and ends with an `OK` summary.
 
+See [tests/README.md](tests/README.md) for linting, the frontend and browser checks, running everything with `python scripts/test.py`, and running the suite in Docker.
+
 ## Apply database migrations
 
 With the dependencies from `requirements.txt` installed and the settings from `.env.example` set in the environment, apply any pending PostgreSQL migrations from the repository root:
