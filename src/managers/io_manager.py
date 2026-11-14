@@ -4,6 +4,7 @@ import asyncio
 
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
+from uuid import UUID
 
 from src.config import limits
 from src.errors import error_codes
@@ -98,6 +99,21 @@ class IOManager:
                 }
             )
             return response
+
+        @app.get("/api/jobs/{job_id}")
+        async def job_status(job_id: str):
+            try:
+                job_id = str(UUID(job_id))
+            except ValueError as error:
+                raise HTTPException(status_code=404, detail="Processing task was not found.") from error
+
+            try:
+                response = await run_in_threadpool(self.data.get_job_status, job_id)
+            except ProcessingError as error:
+                if error.code != error_codes.NOT_FOUND:
+                    raise
+                raise HTTPException(status_code=404, detail=error.message) from error
+            return asdict(response)
 
         @app.get("/api/projects/{project_id}/events")
         async def project_events(project_id: str, request: Request, after: int = 0):
