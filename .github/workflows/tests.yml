@@ -53,3 +53,6 @@ jobs:
 
       - name: Run loading browser regression
         run: npm run test:loading --prefix frontend
+
+      - name: Run calendar browser regression
+        run: npm run test:calendar --prefix frontend
