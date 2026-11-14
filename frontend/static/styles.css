@@ -170,3 +170,50 @@ footer { display: flex; justify-content: space-between; width: var(--page); marg
 .processing-live { overflow-wrap:anywhere; }
 .processing-live > span:last-child { min-width:0; }
 @media (max-width:400px) { .document-progress-item { gap:8px; padding-inline:4px; } .document-state-label { max-width:72px; } }
+
+.recovery-actions { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; }
+.recovery-actions a { color:var(--accent, #9bcab9); }
+.replacement-label { display:grid; gap:.35rem; font-size:.85rem; }
+.replacement-label input { max-width:14rem; }
+.document-progress-name small { display:block; }
+
+/* Recovery keeps the calendar usable and incomplete coverage explicit. */
+.coverage-notice { margin:0 0 28px; border:1px solid #6c6042; border-radius:12px; background:#28271e; overflow:hidden; }
+.coverage-heading { display:flex; gap:16px; align-items:flex-start; padding:22px 24px; }
+.coverage-symbol { display:grid; place-items:center; width:28px; height:28px; flex:0 0 28px; border:1px solid #9f8955; border-radius:50%; color:#ecd096; font-weight:600; }
+.coverage-heading > div { flex:1; min-width:0; }
+.coverage-heading .issue-kicker { margin:0 0 5px; color:#e6c48a; font-size:10px; text-transform:uppercase; letter-spacing:.08em; }
+.coverage-heading h2 { margin:0 0 8px; font-size:18px; }
+.coverage-heading p:last-child { margin:0; font-size:13px; color:#c4c2b5; line-height:1.6; }
+.coverage-count { padding:5px 9px; border:1px solid #736448; border-radius:20px; color:#e6c48a; font-size:11px; white-space:nowrap; }
+.recovery-disclosure { border-top:1px solid #6c604266; }
+.recovery-disclosure > summary { padding:14px 24px; color:#e6c48a; font-size:12px; cursor:pointer; }
+.recovery-disclosure .document-progress { margin:0; padding:0 24px 20px; border:0; }
+.recovery-documents h3 { margin:8px 0 14px; font-size:14px; }
+.recovery-documents .document-progress-list { max-height:none; overflow:visible; display:grid; gap:12px; }
+.recovery-documents .document-progress-item { display:block; padding:18px; border:1px solid #4b4c3e; border-radius:8px; background:#1d241f; }
+.recovery-document-head { display:flex; gap:16px; align-items:center; }
+.recovery-status { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--accent); }
+.recovery-status.needs-attention { color:#e6c48a; }
+.recovery-explanation { margin:12px 0; color:#bcc5bb; font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.recovery-actions { margin-top:14px; gap:10px 18px; }
+.recovery-actions a { font-size:12px; }
+.recovery-actions button { font-size:12px; padding:8px 12px; }
+.replacement-label { position:relative; display:flex; align-items:center; min-height:44px; padding:8px 12px; border:1px solid var(--line-strong); border-radius:6px; font-size:12px; cursor:pointer; }
+.replacement-label input { position:absolute; inset:0; width:100%; height:100%; max-width:none; opacity:0; cursor:pointer; }
+.replacement-label:focus-within { outline:3px solid var(--accent); outline-offset:3px; }
+.replacement-label:has(input:disabled) { opacity:.45; cursor:not-allowed; }
+.replacement-review { margin-top:16px; padding:16px; border-top:1px solid var(--line-strong); font-size:12px; overflow-wrap:anywhere; }
+.replacement-review p { line-height:1.7; }
+.replacement-review button { margin:0 8px 8px 0; font-size:12px; }
+.recovery-spinner { width:12px; height:12px; border:1px solid #50705b; border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; }
+@media(max-width:600px) {
+ .coverage-heading { flex-wrap:wrap; padding:18px; gap:12px; }
+ .coverage-heading h2 { font-size:16px; }
+ .coverage-count { margin-left:40px; }
+ .recovery-disclosure > summary { padding:14px 18px; }
+ .recovery-disclosure .document-progress { padding:0 12px 12px; }
+ .recovery-documents .document-progress-item { padding:14px; }
+ .recovery-document-head { align-items:flex-start; }
+ .recovery-status { max-width:100px; flex-shrink:0; }
+}
