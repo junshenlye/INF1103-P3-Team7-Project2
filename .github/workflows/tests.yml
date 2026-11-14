@@ -54,3 +54,6 @@ jobs:
 
       - name: Run calendar browser regression
         run: npm run test:calendar --prefix frontend
+
+      - name: Run submission recovery browser regression
+        run: npm run test:recovery --prefix frontend
