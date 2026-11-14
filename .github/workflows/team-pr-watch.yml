@@ -1,0 +1,70 @@
+name: Team PR Watch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - integrations/github_actions_notifier/**
+      - .github/workflows/team-pr-watch.yml
+  schedule:
+    - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+    inputs:
+      send_test:
+        description: Send one Telegram connection-test message
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  actions: read
+
+concurrency:
+  group: team-pr-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Test watcher logic
+        working-directory: integrations/github_actions_notifier
+        run: python3 -m unittest -v
+
+      - name: Restore notification state
+        uses: actions/cache/restore@v4
+        with:
+          path: integrations/github_actions_notifier/.state
+          key: team-pr-watch-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: team-pr-watch-v1-
+
+      - name: Check repository
+        working-directory: integrations/github_actions_notifier
+        env:
+          SOURCE_REPOSITORY: junshenlye/INF1103-P3-Team7-Project2
+          GITHUB_TOKEN: ${{ github.token }}
+          SOURCE_GITHUB_TOKEN: ${{ secrets.SOURCE_GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SEND_TEST: ${{ inputs.send_test }}
+        run: |
+          if [ "$SEND_TEST" = "true" ]; then
+            python3 watch.py --test
+          else
+            python3 watch.py
+          fi
+
+      - name: Save notification state
+        if: ${{ always() && hashFiles('integrations/github_actions_notifier/.state/watch.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: integrations/github_actions_notifier/.state
+          key: team-pr-watch-v1-${{ github.run_id }}-${{ github.run_attempt }}
