@@ -6,8 +6,7 @@ The checks below are the same ones the CI workflow (`.github/workflows/tests.yml
 
 | Need | Command |
 | --- | --- |
-| Python 3.12 dependencies | `python -m pip install -r requirements.txt` |
-| Ruff (the version CI pins) | `python -m pip install ruff==0.8.6` |
+| Python 3.12 and development tools | `python -m pip install -r requirements-dev.txt` |
 | Node 22 frontend dependencies | `npm ci --prefix frontend` |
 | Chromium for browser tests | `cd frontend && npx playwright install chromium` |
 
