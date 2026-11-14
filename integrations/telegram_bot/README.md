@@ -1,53 +1,67 @@
-# Telegram group command bot
+# Telegram PR tracker
 
-An optional, standalone Python 3.12+ integration for querying this repository from a Telegram group and forwarding selected GitHub events. It uses only the Python standard library and does not change the Stackplan application or require application/provider credentials.
+An independent Python 3.9+ service with no additional packages. It does not change the Stackplan app, create issues, merge PRs, or post code to Telegram.
 
-## Configure
+## Run commands on this Mac
 
-1. Create a Telegram bot with BotFather and add it to the intended group. Give it permission to send messages; admin rights and disabling privacy mode are not required.
-2. Copy `.env.example` to `.env` in this directory. Set `TELEGRAM_BOT_TOKEN` and `GITHUB_REPOSITORY`. Keep `.env` private; it is ignored by Git.
-3. Discover the bot username and group ID without sending a message:
+With the private `.env` configured, run from the project root:
 
-   ```sh
-   python integrations/telegram_bot/bot.py --discover
-   ```
+```sh
+python3 integrations/telegram_bot/install_macos.py
+```
 
-   Send `/setup@YourBotUsername` in the group, then run discovery again. Copy the printed negative group ID into `TELEGRAM_CHAT_ID`.
-4. Start the command listener:
+This copies the listener and private configuration to `~/Library/Application Support/TeamPRBot`, starts it in the background, and installs a per-user login service. No administrator account, HTTP port, public URL, or GitHub webhook is needed for this mode. The scheduled watcher in `junshenlye/team-pr-watch-7f3c9a` continues to send GitHub alerts, while this Mac handles `/prs`, `/tasks`, and `/help` in the configured group. Only one command listener should run for this bot token.
 
-   ```sh
-   python integrations/telegram_bot/bot.py --commands-only
-   ```
+The Mac must be awake, online, and logged in for immediate command replies. Closing the chat or terminal does not stop the login service. Updating files in this project does not change the installed copy until the installer is run again. The `.env` in the runtime directory is private to your user. `stdout.log` records startup and successful command names; `stderr.log` contains failures. `state.sqlite3` stores the Telegram offset and last successful polling/command times.
 
-   Keep one listener running for this bot token. It uses Telegram long polling and stores its update offset in the local `state.sqlite3` file so restarts do not normally replay old commands. The host must remain online for immediate replies.
+```sh
+python3 integrations/telegram_bot/install_macos.py --status
+python3 integrations/telegram_bot/install_macos.py --stop
+```
 
-## Group commands
+Stopping also disables next-login startup; configuration/state are retained. Re-run the installer to start and enable it again. For a foreground session instead, use `python3 integrations/telegram_bot/bot.py --commands-only`.
 
-- `/help` or `/start` — show the command list.
-- `/prs` — list up to 20 open pull requests with links and assignees.
-- `/tasks` — list up to 20 open GitHub Issues (pull requests are filtered out).
-- Add `@YourBotUsername` to a command if Telegram needs an explicit bot mention.
+## Connect the group
 
-Commands from chats other than the configured group are ignored. Public repository reads need no GitHub token; an optional fine-grained `GITHUB_TOKEN` only needs read access to Issues and Pull requests for this repository. No GitHub write permission is used.
+1. Copy `.env.example` to `.env` in this folder, unless the private file already exists. Keep it private and excluded from Git. Set `TELEGRAM_BOT_TOKEN` from BotFather and generate a long random `GITHUB_WEBHOOK_SECRET` (the prepared local file already has one).
+2. Add the bot to the desired Telegram group with permission to send messages. Admin rights and disabling privacy mode are unnecessary.
+3. Run `python3 integrations/telegram_bot/bot.py --discover` from the repository root. It prints the bot username without exposing the token.
+4. Send `/setup@YourBotUsername` in the group. Run discovery again if the first attempt timed out. It prints matching group IDs locally and sends no messages. Select the intended group and put its negative ID in `TELEGRAM_CHAT_ID`. Invite links cannot substitute for this ID. Discovery does not automatically select a group.
+5. Run `python3 integrations/telegram_bot/bot.py`. Only run one instance per bot token. It uses Telegram long polling; an existing Telegram webhook must be removed before running it.
 
-## Optional immediate GitHub event notifications
+## Connect GitHub
 
-To forward GitHub events as well as answer group commands, run the default server mode instead of `--commands-only`. Set a random `GITHUB_WEBHOOK_SECRET` of at least 32 characters and optionally `PORT` (default 8088). The service listens on `/github` and `/health`.
+Keep the service running on a computer/server. Expose port 8088 through a trusted HTTPS reverse proxy or tunnel. Put the service behind that proxy; the Python HTTP listener is not an internet-facing TLS server. No host or tunnel is provisioned by this integration.
 
-Expose it only through a trusted HTTPS reverse proxy or tunnel; the Python listener itself does not provide TLS. In GitHub **Settings → Webhooks**, add `https://YOUR-HOST/github`, choose JSON, use the same secret, keep SSL verification enabled, and subscribe to Pull requests, Pull request reviews, Issue comments, Issues, and Workflow runs.
+In the repository's **Settings → Webhooks → Add webhook**:
 
-The handler verifies GitHub's SHA-256 signature, checks the repository, limits request bodies, and stores successful delivery IDs in SQLite for 30 days. Failed Telegram sends return HTTP 503 so the delivery can be investigated and redelivered. A crash after Telegram accepts a message but before the delivery receipt is committed can still produce a duplicate. Only top-level CodeRabbit PR comments are forwarded; edited comments and inline review comments are not.
+- Payload URL: `https://YOUR-HOST/github`
+- Content type: `application/json`
+- Secret: the private `GITHUB_WEBHOOK_SECRET` value
+- Keep SSL verification enabled
+- Select **Pull requests**, **Pull request reviews**, **Issue comments**, **Issues**, and **Workflow runs**
 
-**Do not run two polling listeners for the same bot token.** A Telegram bot can use either long polling or a Telegram webhook; this integration uses long polling.
+GitHub sends signed events; the service verifies the signature and configured repository before forwarding. Delivery IDs are retained in local SQLite for 30 days to suppress ordinary retries. A crash after Telegram accepts a message but before the local receipt is saved can still duplicate it. Failed sends return HTTP 503: inspect GitHub's Recent Deliveries and manually redeliver failures; do not assume automatic retries. Preserve `state.sqlite3` across restarts.
+
+Notifications cover PR opening/reopening, closing/merging, ready-for-review, review requests, submitted reviews, new CodeRabbit top-level PR comments, task opening/assignment/closing, and completed GitHub Actions workflows. CodeRabbit comments edited in place and inline review-comment events are not forwarded. CI messages describe individual workflows, not an aggregate merge-readiness verdict.
+
+Group commands:
+
+- `/prs` — first 20 open PRs with links and assignees
+- `/tasks` — first 20 open Issues with links and assignees (filters the first 100 Issues API results)
+- `/help` — command list
+
+Use `/prs@YourBotUsername` if Telegram needs an explicit bot mention. Commands from other chats are ignored. Public repository reads work without `GITHUB_TOKEN`, subject to GitHub's shared unauthenticated rate limit. An optional fine-grained token only needs read access to **Issues** and **Pull requests** for this repository. No GitHub write token is required for notifications.
+
+## Divide work
+
+Create one GitHub Issue per small deliverable, assign one owner, and include acceptance criteria, dependencies, and a test/checklist. Use one branch and PR per Issue. Put `Closes #123` in the PR description to link completion on merge into the default branch. Team username mappings and requirements are still needed before implementing personal task commands or creating a project-specific backlog.
 
 ## Verify
 
 ```sh
-python -m unittest discover -s integrations/telegram_bot -v
+cd integrations/telegram_bot
+python3 -m unittest -v
 ```
 
-Tests mock Telegram and GitHub and cover group restrictions, command output, event formatting, signed webhook requests, duplicate delivery suppression, and retry after a failed send. They do not contact external services or send real messages.
-
-## Local state and secrets
-
-`state.sqlite3` is created beside the script and ignored by Git. Keep it across restarts to preserve polling offsets and webhook delivery receipts. Never commit `.env`, bot tokens, GitHub tokens, or webhook secrets. Remote API errors are deliberately sanitized so Telegram token-bearing URLs are not printed.
+Tests mock Telegram/GitHub and verify signed webhook handling, duplicate suppression, failed-delivery retry, repository/group restrictions, CodeRabbit filtering, and task listing. `/health` checks the HTTP listener only, not remote API availability. Secrets are never included in error output. Rotate the bot token in BotFather if exposed, then update the private `.env` and restart.
