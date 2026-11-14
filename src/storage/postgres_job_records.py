@@ -36,6 +36,27 @@ def require_live_lease(connection, job) -> None:
         )
 
 
+def require_current_document_task(connection, job, task) -> None:
+    """Lock the job and verify ownership of its running document generation."""
+    require_live_lease(connection, job)
+    current = connection.execute(
+        """
+        SELECT document_id FROM stackplan.document_tasks
+        WHERE document_id = %s AND job_id = %s AND generation = %s
+            AND owner_token = %s AND state = 'running'
+        FOR UPDATE
+        """,
+        (task.document.id, job.id, task.generation, job.lease_token),
+    ).fetchone()
+    if current is None:
+        raise ProcessingError(
+            errors.PROCESSING_INTERRUPTED,
+            "This document attempt is no longer current.",
+            "document",
+            document_id=task.document.id,
+        )
+
+
 def insert_issue(connection, job_id: str, issue: dict) -> None:
     """Store one issue dictionary (as built by ``make_issue``) for ``job_id``."""
     connection.execute(
