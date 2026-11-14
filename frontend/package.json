@@ -8,7 +8,8 @@
     "test:browser": "node ../tests/frontend/browser.mjs",
     "dev": "node dev-server.mjs",
     "test:calendar": "node ../tests/frontend/calendar.mjs",
-    "test:loading": "node ../tests/frontend/loading.mjs"
+    "test:loading": "node ../tests/frontend/loading.mjs",
+    "test:intake": "node ../tests/frontend/intake.mjs"
   },
   "devDependencies": {
     "playwright": "1.65.0"
