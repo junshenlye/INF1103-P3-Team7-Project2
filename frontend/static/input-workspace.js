@@ -2,7 +2,14 @@ import { escape as e } from './html.js';
 
 const freshModule = () => ({ title: '', credit: '6', files: [] });
 let inputLimits;
-export function configureInputLimits(value) { inputLimits = value; }
+export function configureInputLimits(value) {
+  const numericFields = ['module_count', 'documents_per_module', 'document_bytes', 'request_bytes', 'project_name_length', 'module_title_length', 'credit', 'week_count'];
+  if (!value || numericFields.some(key => !Number.isSafeInteger(value[key]) || value[key] < 1) ||
+      !Array.isArray(value.media_types) || !value.media_types.length || value.media_types.some(type => typeof type !== 'string' || !type.trim())) {
+    throw new Error('Upload settings could not be loaded. Reload the page or check that the app is running the latest version.');
+  }
+  inputLimits = { ...value, media_types: [...value.media_types] };
+}
 const sizeLabel = bytes => `${bytes / (1024 * 1024)} MB`;
 const icons = {
   plus: '<path d="M12 5v14M5 12h14"/>',
