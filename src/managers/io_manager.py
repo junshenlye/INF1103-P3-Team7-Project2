@@ -8,6 +8,8 @@ from pathlib import Path
 from src.config import limits
 from src.errors import error_codes
 from src.errors.processing_error import ProcessingError
+from src.serialization.event_cursor import parse_event_cursor
+from src.serialization.processing_event import encode_processing_event
 from src.serialization.request_json import read_request_json
 
 
@@ -97,7 +99,40 @@ class IOManager:
             )
             return response
 
+        @app.get("/api/projects/{project_id}/events")
+        async def project_events(project_id: str, request: Request, after: int = 0):
+            return await self.get_project_events(project_id, request, after)
+
         return app
+
+    async def get_project_events(self, project_id: str, request, after: int = 0):
+        """Stream replayable project progress events using the Last-Event-ID cursor."""
+        from starlette.concurrency import run_in_threadpool
+        from starlette.responses import StreamingResponse
+
+        cursor = parse_event_cursor(
+            after, last_event_id=request.headers.get("last-event-id")
+        )
+        await run_in_threadpool(self.data.get_project, project_id)
+
+        async def events():
+            sequence = cursor
+            while not await request.is_disconnected():
+                rows = await run_in_threadpool(
+                    self.data.get_processing_events, project_id, sequence
+                )
+                for event in rows:
+                    sequence = event.sequence
+                    yield encode_processing_event(event)
+                if not rows:
+                    yield ": keep-alive\n\n"
+                await asyncio.sleep(1)
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
 
 def _json(value):
