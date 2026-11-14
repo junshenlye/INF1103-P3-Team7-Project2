@@ -12,7 +12,7 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -30,6 +30,13 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Install Chromium for browser regression tests
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
       - name: Compile source and tests
         run: python -m compileall -q src tests
 
@@ -43,3 +50,6 @@ jobs:
 
       - name: Run frontend checks
         run: npm run check --prefix frontend
+
+      - name: Run loading browser regression
+        run: npm run test:loading --prefix frontend
