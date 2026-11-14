@@ -228,6 +228,77 @@ class DataManager:
                 event_cursor=event_cursor,
             )
 
+    def get_published_result(self, result_id: str) -> dict:
+        """Read a published revision with its current assessment facts and citations."""
+        with self.pool.connection() as connection, connection.transaction():
+            connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            result = connection.execute(
+                """
+                SELECT id::text AS id, job_id::text AS job_id, module_id::text AS module_id,
+                       uncertainties, metrics
+                FROM stackplan.extraction_results WHERE id = %s AND published
+                """,
+                (result_id,),
+            ).fetchone()
+            if result is None:
+                raise ProcessingError(errors.NOT_FOUND, "Published result was not found.", "module")
+
+            assessments = connection.execute(
+                """
+                SELECT a.id::text AS id, a.result_id::text AS result_id,
+                       a.module_id::text AS module_id,
+                       a.parent_assessment_id::text AS parent_assessment_id,
+                       COALESCE(review.facts, a.facts) AS facts,
+                       COALESCE(review.revision, 0) AS revision,
+                       COALESCE(citations.evidence, '{}'::jsonb) AS evidence
+                FROM stackplan.assessments AS a
+                LEFT JOIN LATERAL (
+                    SELECT id, facts, revision FROM stackplan.review_revisions
+                    WHERE assessment_id = a.id ORDER BY revision DESC LIMIT 1
+                ) AS review ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT jsonb_object_agg(field, sources) AS evidence
+                    FROM (
+                        SELECT field, jsonb_agg(source_element_id ORDER BY source_element_id) AS sources
+                        FROM (
+                            SELECT field, source_element_id FROM stackplan.assessment_evidence
+                            WHERE assessment_id = a.id AND review.id IS NULL
+                            UNION ALL
+                            SELECT field, source_element_id FROM stackplan.review_evidence
+                            WHERE review_id = review.id
+                        ) AS source_rows
+                        GROUP BY field
+                    ) AS fields
+                ) AS citations ON TRUE
+                WHERE a.result_id = %s ORDER BY a.id
+                """,
+                (result_id,),
+            ).fetchall()
+
+        return {**result, "assessments": [dict(row) for row in assessments]}
+
+    def get_published_result_documents(self, result_id: str) -> list[dict]:
+        """List the result's module documents, including historical sources."""
+        with self.pool.connection() as connection:
+            result = connection.execute(
+                """
+                SELECT COALESCE(
+                    jsonb_agg(jsonb_build_object(
+                        'id', document.id, 'filename', document.filename, 'media_type', document.media_type
+                    ) ORDER BY document.id) FILTER (WHERE document.id IS NOT NULL),
+                    '[]'::jsonb
+                ) AS documents
+                FROM stackplan.extraction_results AS result
+                LEFT JOIN stackplan.documents AS document ON document.module_id = result.module_id
+                WHERE result.id = %s AND result.published
+                GROUP BY result.id
+                """,
+                (result_id,),
+            ).fetchone()
+        if result is None:
+            raise ProcessingError(errors.NOT_FOUND, "Published result was not found.", "module")
+        return result["documents"]
+
     def get_processing_events(self, project_id: str, after: int = 0) -> list[ProcessingEvent]:
         """Return up to 100 events after the project-scoped cursor."""
         cursor = parse_event_cursor(after)

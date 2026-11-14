@@ -149,6 +149,28 @@ class IOManager:
             )
             return response
 
+        async def read_published_result(result_id, reader):
+            try:
+                result_id = str(UUID(result_id))
+            except ValueError as error:
+                raise HTTPException(status_code=404, detail="Published result was not found.") from error
+
+            try:
+                result = await run_in_threadpool(reader, result_id)
+            except ProcessingError as error:
+                if error.code != error_codes.NOT_FOUND:
+                    raise
+                raise HTTPException(status_code=404, detail=error.message) from error
+            return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+
+        @app.get("/api/results/{result_id}")
+        async def published_result(result_id: str):
+            return await read_published_result(result_id, self.data.get_published_result)
+
+        @app.get("/api/results/{result_id}/documents")
+        async def published_result_documents(result_id: str):
+            return await read_published_result(result_id, self.data.get_published_result_documents)
+
         @app.get("/api/jobs/{job_id}")
         async def job_status(job_id: str):
             try:
