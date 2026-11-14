@@ -3,6 +3,8 @@
 import unittest
 from unittest.mock import patch
 
+from jsonschema import Draft202012Validator, ValidationError
+
 from src.config import limits
 from src.errors.error_codes import DOCUMENT_PARSE_FAILED
 from src.errors.processing_error import ProcessingError
@@ -33,6 +35,38 @@ class ExtractionSchemaTests(unittest.TestCase):
             self.assertFalse(node["additionalProperties"])
         for field in evidence["properties"].values():
             self.assertEqual(field, {"type": "array", "items": {"$ref": "#/$defs/source_id"}})
+
+    def test_generated_schema_is_valid_and_rejects_foreign_citations(self):
+        schema = extraction_response_format([source("source-a")])["json_schema"]["schema"]
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema)
+        result = {
+            "module_title": "INF1103",
+            "assessments": [{
+                "key": "exam",
+                "name": "Final exam",
+                "kind": "assessment",
+                "weight_percent": 60,
+                "weight_scope": "module",
+                "week": 12,
+                "end_week": None,
+                "parent_key": None,
+                "evidence": {
+                    "name": ["source-a"],
+                    "kind": ["source-a"],
+                    "weight_percent": ["source-a"],
+                    "weight_scope": ["source-a"],
+                    "week": ["source-a"],
+                    "end_week": [],
+                    "parent_key": [],
+                },
+            }],
+            "uncertainties": [],
+        }
+        validator.validate(result)
+        result["assessments"][0]["evidence"]["name"] = ["not-in-this-chunk"]
+        with self.assertRaises(ValidationError):
+            validator.validate(result)
 
     def test_enforces_citation_budget_after_deduplicating_ids(self):
         with patch.object(limits, "GPT_SOURCE_ID_CHARACTERS", 4):
