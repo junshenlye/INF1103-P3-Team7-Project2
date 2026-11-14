@@ -38,16 +38,19 @@ jobs:
         working-directory: frontend
 
       - name: Compile source and tests
-        run: python -m compileall -q src tests integrations/github_actions_notifier
+        run: python -m compileall -q src tests integrations/github_actions_notifier integrations/telegram_bot
 
       - name: Lint with Ruff
-        run: ruff check --output-format=github src tests integrations/github_actions_notifier
+        run: ruff check --output-format=github src tests integrations/github_actions_notifier integrations/telegram_bot
 
       - name: Run Python unit tests
         run: python -m unittest discover -s tests -v
 
       - name: Run Telegram notifier unit tests
         run: python -m unittest discover -s integrations/github_actions_notifier -v
+
+      - name: Run Telegram group bot unit tests
+        run: python -m unittest discover -s integrations/telegram_bot -v
 
       - name: Run frontend checks
         run: npm run check --prefix frontend

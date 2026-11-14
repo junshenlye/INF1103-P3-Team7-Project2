@@ -11,7 +11,8 @@ A Python domain-model project for representing trimester projects, submitted mod
 - `src/config/` — shared application limits.
 - `src/serialization/` — strict JSON decoding helpers.
 - `tests/` — automated tests for the models and supporting utilities.
-- `integrations/github_actions_notifier/` — optional Telegram alerts for pull requests, reviews, issues, and completed CI runs.
+- `integrations/github_actions_notifier/` — optional scheduled Telegram alerts for pull requests, reviews, issues, and completed CI runs.
+- `integrations/telegram_bot/` — optional Telegram group commands and signed GitHub webhook notifications.
 
 ## Run the tests
 
@@ -28,6 +29,10 @@ See [tests/README.md](tests/README.md) for linting, the frontend and browser che
 ## Optional Telegram notifications
 
 See [integrations/github_actions_notifier/README.md](integrations/github_actions_notifier/README.md) to enable the opt-in GitHub Actions notifier. It requires Telegram bot and group secrets; without them, its scheduled workflow runs the mock-based unit tests and skips outbound notifications.
+
+## Optional Telegram group bot
+
+See [integrations/telegram_bot/README.md](integrations/telegram_bot/README.md) for the standalone group bot. It can list open pull requests and Issues, and optionally forward signed GitHub webhook events. It uses a separate Telegram bot configuration and requires no application/provider credentials.
 
 ## Apply database migrations
 
