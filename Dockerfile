@@ -16,5 +16,7 @@ COPY requirements-dev.txt ./requirements-dev.txt
 RUN pip install --no-cache-dir -r requirements-dev.txt
 COPY tests ./tests
 COPY pytest.ini ./pytest.ini
+# Configuration checks in the suite read these repository files.
+COPY Dockerfile compose.yaml .env.example ./
 USER stackplan
 ENTRYPOINT ["python", "-m", "pytest"]
