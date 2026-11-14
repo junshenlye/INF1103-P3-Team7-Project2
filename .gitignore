@@ -14,6 +14,9 @@ htmlcov/
 stackplan-result.json
 test-results/
 
+# Frontend dependencies
+node_modules/
+
 # Operating system files
 .DS_Store
 
