@@ -1,11 +1,13 @@
 """Persist trimester projects and read processing progress from PostgreSQL."""
 
+import hashlib
 from uuid import uuid4
 
 from src.contracts.postgres_pool import PostgresPool
 from src.errors import error_codes as errors
 from src.errors.processing_error import ProcessingError
 from src.models.documents.document_reference import DocumentReference
+from src.models.processing.checkpoint import ModuleCheckpoint
 from src.models.processing.processing_event import ProcessingEvent
 from src.models.processing.project_snapshot import ProjectSnapshot
 from src.models.projects.module import Module
@@ -216,3 +218,173 @@ class DataManager:
                 (job_id, module_id),
             ).fetchall()
         return [DocumentReference(**row) for row in rows]
+
+
+    def get_module_checkpoint(
+        self, job_id: str, module_id: str
+    ) -> ModuleCheckpoint:
+        """Read the saved extraction candidates and review state for one module.
+
+        All inputs come from one repeatable-read snapshot. Replaced source
+        documents are excluded, and the latest accepted chunk per document
+        and index is used so a retry cannot mix generations.
+        """
+        with self.pool.connection() as connection, connection.transaction():
+            connection.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            )
+            module = connection.execute(
+                "SELECT id FROM stackplan.modules WHERE id = %s AND job_id = %s",
+                (module_id, job_id),
+            ).fetchone()
+            if module is None:
+                raise ProcessingError(
+                    errors.NOT_FOUND,
+                    "Module was not found for this processing job.",
+                    "module",
+                    module_id=module_id,
+                )
+
+            chunks = connection.execute(
+                """
+                SELECT DISTINCT ON (chunk.document_id, chunk.chunk_index)
+                       chunk.records, chunk.uncertainties
+                FROM stackplan.document_chunks AS chunk
+                JOIN stackplan.documents AS document
+                  ON document.id = chunk.document_id
+                JOIN stackplan.modules AS module
+                  ON module.id = document.module_id
+                JOIN stackplan.document_tasks AS task
+                  ON task.document_id = document.id
+                WHERE module.id = %s AND module.job_id = %s
+                  AND chunk.generation >= task.minimum_generation
+                  AND NOT EXISTS (
+                      SELECT 1 FROM stackplan.document_replacements AS replacement
+                      WHERE replacement.old_document_id = document.id
+                  )
+                ORDER BY chunk.document_id, chunk.chunk_index, chunk.generation DESC
+                """,
+                (module_id, job_id),
+            ).fetchall()
+            source_rows = connection.execute(
+                """
+                SELECT source.id::text AS id
+                FROM stackplan.source_elements AS source
+                JOIN stackplan.documents AS document
+                  ON document.id = source.document_id
+                JOIN stackplan.modules AS module
+                  ON module.id = document.module_id
+                WHERE module.id = %s AND module.job_id = %s
+                  AND NOT EXISTS (
+                      SELECT 1 FROM stackplan.document_replacements AS replacement
+                      WHERE replacement.old_document_id = document.id
+                  )
+                ORDER BY source.id
+                """,
+                (module_id, job_id),
+            ).fetchall()
+            current = connection.execute(
+                """
+                SELECT result_id::text AS result_id, manifest
+                FROM stackplan.module_result_heads
+                WHERE module_id = %s
+                """,
+                (module_id,),
+            ).fetchone()
+
+            previous_assessments = []
+            previous_versions = {}
+            if current is not None:
+                stored_assessments = connection.execute(
+                    """
+                    SELECT assessment.id::text AS id,
+                           assessment.result_id::text AS result_id,
+                           assessment.module_id::text AS module_id,
+                           assessment.parent_assessment_id::text AS parent_assessment_id,
+                           assessment.facts AS original_facts,
+                           COALESCE(review.facts, assessment.facts) AS facts,
+                           COALESCE(review.revision, 0) AS revision,
+                           review.id::text AS review_revision_id
+                    FROM stackplan.assessments AS assessment
+                    LEFT JOIN LATERAL (
+                        SELECT id, facts, revision
+                        FROM stackplan.review_revisions
+                        WHERE assessment_id = assessment.id
+                        ORDER BY revision DESC
+                        LIMIT 1
+                    ) AS review ON TRUE
+                    WHERE assessment.result_id = %s
+                    ORDER BY assessment.id
+                    """,
+                    (current["result_id"],),
+                ).fetchall()
+
+                assessment_ids = [row["id"] for row in stored_assessments]
+                original_evidence_rows = []
+                review_evidence_rows = []
+                if assessment_ids:
+                    original_evidence_rows = connection.execute(
+                        """
+                        SELECT assessment_id::text AS assessment_id, field,
+                               source_element_id::text AS source_element_id
+                        FROM stackplan.assessment_evidence
+                        WHERE assessment_id = ANY(%s::uuid[])
+                        ORDER BY assessment_id, field, source_element_id
+                        """,
+                        (assessment_ids,),
+                    ).fetchall()
+                    review_ids = [
+                        row["review_revision_id"]
+                        for row in stored_assessments
+                        if row["review_revision_id"] is not None
+                    ]
+                    if review_ids:
+                        review_evidence_rows = connection.execute(
+                            """
+                            SELECT review_id::text AS review_id, field,
+                                   source_element_id::text AS source_element_id
+                            FROM stackplan.review_evidence
+                            WHERE review_id = ANY(%s::uuid[])
+                            ORDER BY review_id, field, source_element_id
+                            """,
+                            (review_ids,),
+                        ).fetchall()
+
+                def group_evidence(rows, owner_key):
+                    grouped = {}
+                    for evidence in rows:
+                        grouped.setdefault(evidence[owner_key], {}).setdefault(
+                            evidence["field"], []
+                        ).append(evidence["source_element_id"])
+                    return grouped
+
+                original_evidence = group_evidence(
+                    original_evidence_rows, "assessment_id"
+                )
+                reviewed_evidence = group_evidence(review_evidence_rows, "review_id")
+                for stored in stored_assessments:
+                    assessment = dict(stored)
+                    review_id = assessment.pop("review_revision_id")
+                    assessment["original_evidence"] = original_evidence.get(
+                        assessment["id"], {}
+                    )
+                    assessment["evidence"] = (
+                        reviewed_evidence.get(review_id, {})
+                        if review_id is not None
+                        else assessment["original_evidence"]
+                    )
+                    previous_assessments.append(assessment)
+                    previous_versions[assessment["id"]] = assessment["revision"]
+
+        manifest = hashlib.sha256(repr(chunks).encode("utf-8")).hexdigest()
+        return ModuleCheckpoint(
+            records=tuple(record for row in chunks for record in row["records"]),
+            uncertainties=tuple(
+                sorted({item for row in chunks for item in row["uncertainties"]})
+            ),
+            source_ids=frozenset(row["id"] for row in source_rows),
+            manifest=manifest,
+            unchanged=bool(current and current["manifest"] == manifest),
+            previous_assessments=tuple(previous_assessments),
+            previous_versions=previous_versions,
+        )
