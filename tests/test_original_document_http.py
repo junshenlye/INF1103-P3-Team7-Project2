@@ -80,3 +80,55 @@ class OriginalDocumentHTTPTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["issues"][0]["code"], "source_missing")
         self.assertNotIn("Content-Disposition", response.headers)
+
+    def read_trace(self, document_id=None):
+        return self.client.get(f"/api/documents/{document_id or self.document_id}/trace")
+
+    def test_trace_returns_saved_evidence_when_original_is_missing(self):
+        self.path.unlink()
+        parse = {
+            "id": str(uuid4()), "document_id": self.document_id,
+            "parser_version": "docling", "chunk_count": 1,
+        }
+        elements = [{
+            "id": str(uuid4()), "document_id": self.document_id, "parse_id": parse["id"],
+            "text": "Quiz in week 5", "regions": [], "context": "Assessment", "position": 0,
+        }]
+        self.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=self.row)),
+            Mock(fetchone=Mock(return_value=parse)),
+            Mock(fetchall=Mock(return_value=elements)),
+        ]
+
+        response = self.read_trace()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Cache-Control"], "private, no-store")
+        self.assertEqual(response.json(), {
+            "document_id": self.document_id, "filename": "brief.pdf",
+            "checksum": self.row["checksum"], "original_available": False,
+            "parse": parse, "elements": elements,
+        })
+        self.assertEqual(self.execute.call_args.args[1], (parse["id"],))
+        self.assertIn("ORDER BY position", self.execute.call_args.args[0])
+
+    def test_trace_for_an_unparsed_document_indicates_original_availability(self):
+        self.execute.side_effect = [
+            Mock(fetchone=Mock(return_value=self.row)),
+            Mock(fetchone=Mock(return_value=None)),
+        ]
+
+        response = self.read_trace()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["original_available"])
+        self.assertIsNone(response.json()["parse"])
+        self.assertEqual(response.json()["elements"], [])
+        self.assertEqual(self.execute.call_count, 2)
+
+    def test_trace_rejects_invalid_and_unknown_ids(self):
+        self.assertEqual(self.read_trace("invalid").status_code, 404)
+        self.execute.assert_not_called()
+        self.execute.return_value.fetchone.return_value = None
+        self.assertEqual(self.read_trace().status_code, 404)
+        self.execute.assert_called_once()
