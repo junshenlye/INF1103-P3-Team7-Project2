@@ -25,6 +25,24 @@ class ProjectPersistenceTests(unittest.TestCase):
         finally:
             self.checkouts -= 1
 
+    def test_get_health_checks_the_applied_migration_ledger(self):
+        self.db.execute.return_value.fetchone.return_value = {
+            "version": "007_lifecycle_consistency.sql"
+        }
+
+        self.assertEqual(self.manager.get_health(), {"status": "ok"})
+        sql = self.db.execute.call_args.args[0]
+        self.assertIn("SELECT version FROM stackplan.schema_migrations", sql)
+        self.assertEqual(self.checkouts, 0)
+
+    def test_get_health_rejects_an_unmigrated_database(self):
+        self.db.execute.return_value.fetchone.return_value = None
+
+        with self.assertRaisesRegex(RuntimeError, "migrations have not been applied"):
+            self.manager.get_health()
+
+        self.assertEqual(self.checkouts, 0)
+
     def test_create_project_persists_initial_identity(self):
         project = self.manager.create_project("Trimester 1", 14)
 
