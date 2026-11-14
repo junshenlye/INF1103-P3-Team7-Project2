@@ -1,6 +1,7 @@
 """Persist trimester projects and read processing progress from PostgreSQL."""
 
 import hashlib
+import json
 from uuid import uuid4
 
 from src.config.settings import Settings
@@ -439,6 +440,58 @@ class DataManager:
             ).fetchall()
         return [DocumentReference(**row) for row in rows]
 
+
+    def record_extraction_attempt(
+        self,
+        job: ProcessingJob,
+        task: DocumentTask,
+        stage: str,
+        index: int | None,
+        attempt: int,
+        code: str,
+        message: str,
+        status: int | None = None,
+        rejected: dict | None = None,
+    ) -> None:
+        """Record a failed attempt only while the worker owns its task generation."""
+        with self.pool.connection() as connection, connection.transaction():
+            require_live_lease(connection, job)
+            saved = connection.execute(
+                """
+                WITH owned_task AS (
+                    SELECT document_id, generation FROM stackplan.document_tasks
+                    WHERE document_id = %s AND job_id = %s AND generation = %s
+                        AND owner_token = %s AND state = 'running'
+                    FOR UPDATE
+                )
+                INSERT INTO stackplan.extraction_attempts
+                    (document_id, generation, stage, chunk_index, attempt, code,
+                     message, provider_status, rejected)
+                SELECT document_id, generation, %s, %s, %s, %s, %s, %s, %s::jsonb
+                FROM owned_task
+                RETURNING id
+                """,
+                (
+                    task.document.id,
+                    job.id,
+                    task.generation,
+                    job.lease_token,
+                    stage,
+                    index,
+                    attempt,
+                    code,
+                    message[:500],
+                    status,
+                    json.dumps(rejected, allow_nan=False) if rejected is not None else None,
+                ),
+            ).fetchone()
+            if saved is None:
+                raise ProcessingError(
+                    errors.PROCESSING_INTERRUPTED,
+                    "This document attempt is no longer current.",
+                    "document",
+                    document_id=task.document.id,
+                )
 
     def get_module_checkpoint(
         self, job_id: str, module_id: str
