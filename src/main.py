@@ -18,7 +18,7 @@ def create_app(settings=None, data=None):
     @asynccontextmanager
     async def lifespan(_app):
         with open_postgres_pool(settings) as pool:
-            manager.data = DataManager(pool)
+            manager.data = DataManager(pool, document_directory=settings.document_directory)
             try:
                 yield
             finally:

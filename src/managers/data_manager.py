@@ -3,6 +3,7 @@
 import hashlib
 from uuid import uuid4
 
+from src.config.settings import Settings
 from src.contracts.postgres_pool import PostgresPool
 from src.errors import error_codes as errors
 from src.errors.processing_error import ProcessingError
@@ -15,13 +16,19 @@ from src.models.projects.module import Module
 from src.models.projects.project import Project
 from src.schemas.job_status_response import JobStatusResponse
 from src.serialization.event_cursor import parse_event_cursor
+from src.storage.postgres_document_originals import PostgresDocumentOriginals
 
 
 class DataManager:
     """Own SQL access for trimester projects and their processing progress."""
 
-    def __init__(self, pool: PostgresPool):
+    def __init__(self, pool: PostgresPool, *, document_directory=Settings.document_directory):
         self.pool = pool
+        self.document_originals = PostgresDocumentOriginals(pool, document_directory)
+
+    def open_original(self, document_id: str):
+        """Open a verified original for the browser."""
+        return self.document_originals.open_original(document_id)
 
     def get_health(self) -> dict[str, str]:
         """Check that PostgreSQL is reachable and the schema is migrated."""

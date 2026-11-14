@@ -1,7 +1,7 @@
 """HTTP boundary for the browser workspace and project dashboard."""
 
 import asyncio
-
+from contextlib import ExitStack
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from uuid import UUID
@@ -23,8 +23,9 @@ class IOManager:
         self.frontend = Path(frontend_directory or Path(__file__).parents[2] / "frontend")
 
     def get_application(self, *, lifespan=None):
+        from anyio import CancelScope
         from fastapi import FastAPI, HTTPException, Request
-        from fastapi.responses import FileResponse, JSONResponse
+        from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
         from starlette.concurrency import run_in_threadpool
 
         app = FastAPI(lifespan=lifespan, title="Stackplan", docs_url=None, redoc_url=None)
@@ -65,6 +66,54 @@ class IOManager:
         @app.get("/api/limits")
         async def get_limits():
             return {"request_bytes": limits.REQUEST_BYTES, "document_bytes": limits.DOCUMENT_BYTES, "module_count": limits.MODULE_COUNT, "documents_per_module": limits.DOCUMENTS_PER_MODULE, "project_name_length": limits.PROJECT_NAME_LENGTH, "module_title_length": limits.MODULE_TITLE_LENGTH, "credit": limits.CREDIT, "week_count": limits.WEEK_COUNT, "media_types": limits.MEDIA_TYPES}
+
+        class OriginalDocumentResponse(Response):
+            """Hold the verified file open for the lifetime of the ASGI response."""
+
+            def __init__(self, original):
+                super().__init__()
+                self.original = original
+
+            async def __call__(self, scope, receive, send):
+                files = ExitStack()
+                try:
+                    try:
+                        document, chunks = await run_in_threadpool(files.enter_context, self.original)
+                    except ProcessingError as error:
+                        if error.code not in (error_codes.NOT_FOUND, error_codes.SOURCE_MISSING):
+                            raise
+                        response = JSONResponse(
+                            {"issues": [
+                                {"code": error.code, "message": error.message, "scope": error.scope}
+                            ]},
+                            status_code=404,
+                        )
+                        await response(scope, receive, send)
+                        return
+
+                    extension = document.media_type.rsplit("/", 1)[-1]
+                    response = StreamingResponse(
+                        chunks,
+                        media_type=document.media_type,
+                        headers={
+                            "Content-Disposition": f'inline; filename="document-{document.id}.{extension}"',
+                            "Content-Length": str(document.size),
+                            "X-Content-Type-Options": "nosniff",
+                            "Cache-Control": "private, no-store",
+                        },
+                    )
+                    await response(scope, receive, send)
+                finally:
+                    with CancelScope(shield=True):
+                        await run_in_threadpool(files.close)
+
+        @app.get("/api/documents/{document_id}/original", response_class=StreamingResponse)
+        async def original_document(document_id: str):
+            try:
+                document_id = str(UUID(document_id))
+            except ValueError as exc:
+                raise HTTPException(status_code=404) from exc
+            return OriginalDocumentResponse(self.data.open_original(document_id))
 
         @app.get("/api/projects")
         async def projects():

@@ -2,10 +2,12 @@
 
 from contextlib import contextmanager
 from importlib.util import find_spec
+from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
 
 from src.config.limits import JSON_BYTES
+from src.config.settings import Settings
 from src.main import create_app
 
 
@@ -21,7 +23,7 @@ class ProjectCreationHTTPTests(unittest.TestCase):
         self.data = Mock()
         self.data.get_health.return_value = {"status": "ok"}
         self.data.create_project.return_value = {"id": "project-id"}
-        self.settings = object()
+        self.settings = Settings("postgresql://localhost/test", document_directory=Path.cwd())
         self.app = create_app(settings=self.settings, data=self.data)
 
     def test_creates_project_from_json(self):
@@ -72,7 +74,7 @@ class ProjectCreationHTTPTests(unittest.TestCase):
             app = create_app(settings=self.settings)
             self.assertEqual(lifecycle, [])
             with self.client_class(app) as client:
-                manager.assert_called_once_with(pool)
+                manager.assert_called_once_with(pool, document_directory=self.settings.document_directory)
                 self.assertEqual(lifecycle, ["open"])
                 self.assertEqual(client.get("/ready").status_code, 200)
 
