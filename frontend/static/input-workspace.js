@@ -156,7 +156,7 @@ function fileList() {
   }).join('');
 }
 function bucketCards() {
-  if (!bucket.entries.length) return `<p class="bucket-empty">No modules yet. Add a module and its documents.</p>`;
+  if (!bucket.entries.length) return `<div class="bucket-empty"><span class="empty-stack" aria-hidden="true">${icon('file')}</span><strong>Your trimester starts here</strong><p>Added modules will appear here, ready for one final check.</p><div class="empty-module" aria-hidden="true"><i></i><span></span></div><div class="empty-module" aria-hidden="true"><i></i><span></span></div></div>`;
   return `<ol class="bucket-list">${bucket.entries.map((item, index) => `<li class="bucket-card ${bucket.editing === item.id ? 'is-editing' : ''}"><button type="button" class="bucket-open" data-action="input-edit" data-id="${item.id}" aria-label="Edit ${e(item.title)}" ${bucket.editing === item.id ? 'aria-current="true"' : ''}><span class="module-number">${String(index + 1).padStart(2, '0')}</span><span class="bucket-card-copy"><strong>${e(item.title)}</strong><small>${item.credit} credits <span>·</span> ${plural(item.files.length, 'source file')}</small></span><span class="bucket-edit">${icon('edit')}<span>${bucket.editing === item.id ? 'Editing' : 'Edit'}</span></span></button></li>`).join('')}</ol>`;
 }
 function buildHint() {
@@ -166,33 +166,36 @@ function buildHint() {
   if (!bucket.entries.length) return 'Add at least one module to get started.';
   return `${plural(bucket.entries.length, 'module')} ready. Add another or continue.`;
 }
+function reviewFile(file) {
+  if (!previews.has(file)) previews.set(file, URL.createObjectURL(file));
+  const pdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  return `<li><a class="review-file" href="${previews.get(file)}" target="_blank" rel="noopener" aria-label="Preview ${e(file.name)} (opens in a new tab)"><span class="review-thumbnail">${pdf ? icon('file') : `<img src="${previews.get(file)}" alt="">`}</span><span class="review-file-copy"><strong>${e(file.name)}</strong><small>${pdf ? 'PDF document' : 'Image'} · ${file.size < 1024*1024 ? `${Math.max(1, Math.round(file.size/1024))} KB` : `${(file.size/1024/1024).toFixed(1)} MB`}</small></span><span class="preview-label">Preview ↗</span></a></li>`;
+}
 export function inputView(project) {
   if (project) { bucket.name = project.name; bucket.weekCount = String(project.week_count); }
   cleanPreviews();
   const editing = bucket.editing !== null;
+  const documentCount = bucket.entries.reduce((count, item) => count + item.files.length, 0);
   if (!project) bucket.weekCount = '14';
-  return `<section class="input-workspace" aria-labelledby="input-title">
-    <div class="intake-intro"><div class="input-heading"><div><p class="eyebrow">New trimester · ${bucket.weekCount} weeks</p><h1 id="input-title">${reviewing ? 'Review your documents' : 'Bring your modules together'}</h1><p>${reviewing ? 'One final check before we build your schedule.' : 'Add the assessment briefs for each module. We’ll organise the weeks.'}</p></div></div><div class="trimester-line"><label for="trimester-name">Trimester<input id="trimester-name" name="name" maxlength="${inputLimits.project_name_length}" required placeholder="e.g. Year 1, Trimester 1" value="${e(bucket.name)}" ${project ? 'readonly' : ''}></label></div></div>
-    <div class="intake-stages" aria-label="Submission steps"><span ${reviewing ? '' : 'aria-current="step"'}>1 <strong>Modules &amp; documents</strong></span><span ${reviewing ? 'aria-current="step"' : ''}>2 <strong>Review &amp; submit</strong></span></div>
-    <p class="draft-guidance">Your draft stays in this tab. Refreshing clears it. Once submitted, documents cannot be changed.</p>
+  const trimesterField = `<div class="trimester-line"><label for="trimester-name">Trimester name<input id="trimester-name" name="name" maxlength="${inputLimits.project_name_length}" required placeholder="e.g. Year 1, Trimester 1" value="${e(bucket.name)}" ${project ? 'readonly' : ''}></label><span class="term-caption-small">${bucket.weekCount} teaching weeks</span></div>`;
+  const reviewAction = `<div class="bucket-footer"><p id="build-hint">${buildHint()}</p><button type="button" class="primary build-schedule" data-action="input-review" data-disabled="${!bucket.canBuild}" ${bucket.canBuild ? '' : 'disabled'}>Review documents${icon('arrow')}</button><p class="draft-guidance">Draft stays in this tab. Refreshing clears it.</p></div>`;
+  return `<section class="input-workspace ${reviewing ? 'is-reviewing' : ''}" aria-labelledby="input-title">
+    <ol class="intake-stages" aria-label="Submission steps"><li ${reviewing ? 'class="stage-complete"' : 'aria-current="step"'}><span>${reviewing ? icon('check') : '01'}</span> Add your modules</li><li ${reviewing ? 'aria-current="step"' : ''}><span>02</span> Review documents</li><li><span>03</span> Get your schedule</li></ol>
+    <div class="intake-intro"><div class="input-heading"><h1 id="input-title" tabindex="-1">${reviewing ? 'Everything in order?' : 'Build your trimester'}</h1><p>${reviewing ? 'Check your modules and open any file to make sure it’s the right one.' : 'Add each module and its assessment briefs, then review them together.'}</p></div>${reviewing ? trimesterField : ''}</div>
     <div class="input-grid" ${reviewing ? 'hidden' : ''}>
-      <section class="module-editor" aria-labelledby="editor-title"><div class="panel-heading"><div><h2 id="editor-title">${editing ? 'Update module' : bucket.entries.length ? 'Add another module' : 'Add your first module'}</h2></div></div>
+      <section class="module-editor" aria-labelledby="editor-title"><div class="panel-heading"><div><p class="panel-kicker">MODULE ${String(editing ? bucket.entries.findIndex(item => item.id === bucket.editing) + 1 : bucket.entries.length + 1).padStart(2,'0')}</p><h2 id="editor-title">${editing ? 'Update your module' : bucket.entries.length ? 'Add another module' : 'Add your first module'}</h2></div><span class="editor-tag">${editing ? 'Editing' : 'New module'}</span></div>
         <form id="module-form"><div class="module-fields"><label for="module-title">Module title<input id="module-title" name="module-title" aria-describedby="input-error" value="${e(bucket.current.title)}" required maxlength="${inputLimits.module_title_length}" placeholder="e.g. INF1103 · Programming Fundamentals" autocomplete="off"></label><label for="module-credit">Credits<input id="module-credit" name="module-credit" aria-describedby="input-error" type="number" min="1" max="${inputLimits.credit}" step="1" required value="${e(bucket.current.credit)}"></label></div>
-          <div class="screenshot-heading"><label for="module-images">Source documents</label><span id="file-count">${plural(bucket.current.files.length, 'file')}</span></div>
-          <label class="screenshot-drop" id="screenshot-drop" for="module-images"><input id="module-images" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple aria-describedby="file-help input-error"><span class="upload-symbol">${icon('upload')}</span><strong>Drop files here, or <u>choose from your device</u></strong><small id="file-help">PDF, PNG or JPG · up to ${sizeLabel(inputLimits.document_bytes)} each · ${sizeLabel(inputLimits.request_bytes)} complete upload</small></label>
+          <div class="screenshot-heading"><label for="module-images">Assessment documents</label><span id="file-count">${plural(bucket.current.files.length, 'file')}</span></div>
+          <label class="screenshot-drop" id="screenshot-drop" for="module-images"><input id="module-images" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple aria-describedby="file-help input-error"><span class="upload-symbol">${icon('upload')}</span><strong>Drop your briefs here</strong><span class="upload-browse">or choose files ${icon('arrow')}</span><small id="file-help">PDF, PNG or JPG · ${sizeLabel(inputLimits.document_bytes)} each<br> ${sizeLabel(inputLimits.request_bytes)} complete upload</small></label>
           <ul class="screenshot-files" id="screenshot-files" aria-label="Selected documents">${fileList()}</ul>
           <p class="input-error" id="input-error" role="alert" ${inputError ? '' : 'hidden'}>${e(inputError)}</p>
-          <div class="editor-actions"><button type="button" data-action="${editing ? 'input-cancel' : 'input-clear'}" class="editor-secondary">${editing ? 'Cancel edits' : 'Clear form'}</button>${editing ? '<button type="button" data-action="input-remove" class="remove-from-bucket" aria-label="Remove this module from bucket">Remove module</button>' : ''}<button type="submit" class="primary">${editing ? 'Save changes' : 'Add module'}${icon(editing ? 'check' : 'arrow')}</button></div>
+          <div class="editor-actions"><button type="button" data-action="${editing ? 'input-cancel' : 'input-clear'}" class="editor-secondary">${editing ? 'Cancel edits' : 'Clear form'}</button>${editing ? '<button type="button" data-action="input-remove" class="remove-from-bucket" aria-label="Remove this module from bucket">Remove module</button>' : ''}<button type="submit" class="primary">${editing ? 'Save changes' : 'Add module'}${icon(editing ? 'check' : 'plus')}</button></div>
         </form>
       </section>
-      <aside class="module-bucket" aria-labelledby="bucket-title"><div class="panel-heading"><div><h2 id="bucket-title">Your modules <span class="bucket-count">${bucket.entries.length}</span></h2></div></div><p class="bucket-description">Select a module to edit its documents.</p>
-        <div class="bucket-content" tabindex="0" role="region" aria-label="Modules in your bucket">${bucketCards()}</div>
-        <div class="bucket-notice" role="status" aria-live="polite">${e(notice)}${bucket.removed ? '<button type="button" data-action="input-undo">Undo removal</button>' : ''}</div>
-
-      </aside>
+      <aside class="module-bucket" aria-labelledby="bucket-title">${reviewing ? '' : trimesterField}<div class="panel-heading"><h2 id="bucket-title">Your modules <span class="bucket-count">${bucket.entries.length}</span></h2><span class="bucket-total">${plural(documentCount,'document')}</span></div><p class="bucket-description">${bucket.entries.length ? 'All together. Select a module to make changes.' : 'Build your collection, one module at a time.'}</p><div class="bucket-content" tabindex="0" role="region" aria-label="Modules in your bucket">${bucketCards()}</div><div class="bucket-notice" role="status" aria-live="polite">${e(notice)}${bucket.removed ? '<button type="button" data-action="input-undo">Undo removal</button>' : ''}</div>${reviewing ? '' : reviewAction}</aside>
     </div>
-    ${reviewing ? `<section class="submission-review" aria-label="Submission review">${bucket.entries.map(item => `<article><div><h2>${e(item.title)}</h2><p>${item.credit} credits · ${plural(item.files.length,'document')}</p><button type="button" data-action="input-edit" data-id="${item.id}" aria-label="Edit ${e(item.title)}" class="text-button">Edit module</button></div><ul>${item.files.map(file => `<li>${icon('file')}<span>${e(file.name)}</span><small>${file.size < 1024*1024 ? `${Math.max(1, Math.round(file.size/1024))} KB` : `${(file.size/1024/1024).toFixed(1)} MB`}</small></li>`).join('')}</ul></article>`).join('')}<p class="review-note">Submitting locks these documents. To change them afterwards, start a new trimester.</p></section>` : ''}
-    <div class="input-bottom"><div><p id="build-hint">${buildHint()}</p></div>${reviewing ? '<button type="button" data-action="input-back">Back to modules</button>' : ''}<button type="button" class="primary build-schedule" data-action="${reviewing ? 'build-schedule' : 'input-review'}" data-disabled="${!bucket.canBuild}" ${bucket.canBuild ? '' : 'disabled'}>${reviewing ? 'Build assessment schedule' : 'Review documents'}${icon('arrow')}</button></div>
+    ${reviewing ? `<section class="submission-review" aria-label="Submission review"><div class="review-list-heading"><h2>Documents to include</h2><span>${plural(bucket.entries.length,'module')}</span></div>${bucket.entries.map((item,index) => `<article><header><span class="review-module-number">${String(index+1).padStart(2,'0')}</span><div><h2>${e(item.title)}</h2><p>${item.credit} credits · ${plural(item.files.length,'document')}</p></div><button type="button" data-action="input-edit" data-id="${item.id}" aria-label="Edit ${e(item.title)}" class="text-button">${icon('edit')} Edit</button></header><ul>${item.files.map(reviewFile).join('')}</ul></article>`).join('')}</section>` : ''}
+    ${reviewing ? `<div class="input-bottom"><p class="panel-kicker">READY WHEN YOU ARE</p><h2>Your next ${bucket.weekCount} weeks,<br>in one place.</h2><dl class="review-totals"><div><dt>Modules</dt><dd>${bucket.entries.length}</dd></div><div><dt>Documents</dt><dd>${documentCount}</dd></div><div><dt>Teaching weeks</dt><dd>${bucket.weekCount}</dd></div></dl><p class="review-note">Submitting locks these documents. To change them afterwards, start a new trimester.</p><p id="build-hint">${buildHint()}</p><button type="button" class="primary build-schedule" data-action="build-schedule" data-disabled="${!bucket.canBuild}" ${bucket.canBuild ? '' : 'disabled'}>Build assessment schedule${icon('arrow')}</button><button type="button" data-action="input-back" class="review-back">Back to modules</button></div>` : ''}
   </section>`;
 }
 
@@ -231,7 +234,7 @@ export function saveInputModule(redraw) {
     notice = `${saved.title} ${editing ? 'updated' : 'added to your bucket'}.`;
     inputError = '';
     redraw();
-    document.querySelector(reviewing ? '[data-action="build-schedule"]' : '#module-title')?.focus({ preventScroll: true });
+    document.querySelector(reviewing ? '#input-title' : '#module-title')?.focus({ preventScroll: true });
   } catch (error) { showInputError(error.message); }
 }
 export function handleInputAction(target, redraw) {
@@ -255,7 +258,7 @@ export function handleInputAction(target, redraw) {
       return true;
     }
     redraw();
-    document.querySelector(reviewing ? '[data-action="build-schedule"]' : '#module-title')?.focus({ preventScroll: true });
+    document.querySelector(reviewing ? '#input-title' : '#module-title')?.focus({ preventScroll: true });
   } catch (error) { showInputError(error.message); }
   return true;
 }
