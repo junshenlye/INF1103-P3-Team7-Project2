@@ -20,6 +20,7 @@ class IOManager:
     def get_application(self):
         from fastapi import FastAPI, HTTPException, Request
         from fastapi.responses import FileResponse, JSONResponse
+        from starlette.concurrency import run_in_threadpool
 
         app = FastAPI(title="Stackplan", docs_url=None, redoc_url=None)
 
@@ -55,7 +56,7 @@ class IOManager:
 
         @app.get("/api/projects")
         async def projects():
-            return self.data.get_projects()
+            return await run_in_threadpool(self.data.get_projects)
 
         @app.post("/api/projects", status_code=201)
         async def create_project(request: Request):
@@ -64,7 +65,8 @@ class IOManager:
 
         @app.get("/api/projects/{project_id}")
         async def project(project_id: str):
-            return _json(self.data.get_project(project_id))
+            value = await run_in_threadpool(self.data.get_project, project_id)
+            return _json(value)
 
         return app
 
