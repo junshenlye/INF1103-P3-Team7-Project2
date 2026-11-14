@@ -80,8 +80,22 @@ class IOManager:
 
         @app.get("/api/projects/{project_id}")
         async def project(project_id: str):
-            value = await run_in_threadpool(self.data.get_project, project_id)
-            return _json(value)
+            snapshot = await run_in_threadpool(
+                self.data.get_project_snapshot, project_id
+            )
+            response = asdict(snapshot.project)
+            response.update(
+                {
+                    "modules": [asdict(module) for module in snapshot.modules],
+                    "assessments": list(snapshot.assessments),
+                    "issues": list(snapshot.issues),
+                    "documents": list(snapshot.documents),
+                    "revision_id": snapshot.revision_id,
+                    "stale": snapshot.stale,
+                    "event_cursor": snapshot.event_cursor,
+                }
+            )
+            return response
 
         return app
 
