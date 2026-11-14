@@ -1,0 +1,130 @@
+/* Schedule-only refinements; the upload and processing workspaces keep their own layouts. */
+.schedule-page main {
+  padding-top: 28px;
+}
+
+.schedule-page .page-heading {
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.schedule-page .page-heading h1 {
+  font-size: clamp(26px, 3vw, 32px);
+}
+
+.schedule-page .module-filters {
+  gap: 6px;
+  padding-bottom: 18px;
+}
+
+.schedule-page .module-filters button {
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.schedule-page .module-filters button[aria-pressed="true"] {
+  border-color: var(--line-strong);
+}
+
+.schedule-page .module-filters button[data-module]:not([data-module=""]) {
+  color: var(--module-colour);
+}
+
+.schedule-page .module-filters button[data-module]:not([data-module=""])[aria-pressed="true"] {
+  border-color: var(--module-colour);
+  background: var(--module-wash);
+}
+
+.schedule-page .term-map {
+  border-radius: 8px;
+}
+
+.schedule-page .week-tile {
+  min-height: 185px;
+  padding: 8px;
+}
+
+.schedule-page .week-tile:not(.has-assessments) {
+  background: #15191b;
+}
+
+.schedule-page .week-tile.is-selected {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.schedule-page .calendar-event.milestone {
+  gap: 5px;
+  padding: 9px 10px;
+  border-radius: 4px;
+}
+
+.schedule-page .calendar-event .calendar-event-name {
+  line-height: 1.4;
+}
+
+.schedule-page .calendar-footer {
+  padding: 10px 16px;
+}
+
+.schedule-page .assessment-agenda {
+  margin-top: 24px;
+}
+
+.schedule-page .agenda-heading {
+  margin-bottom: 12px;
+}
+
+.schedule-page .assessment-row {
+  min-height: 68px;
+  padding: 14px 16px;
+  gap: 18px;
+}
+
+.schedule-page .agenda-empty {
+  margin-bottom: 0;
+}
+
+@media (max-width: 700px) {
+  .schedule-page main {
+    padding-top: 24px;
+  }
+
+  .schedule-page .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .schedule-page .module-filters {
+    padding-bottom: 16px;
+  }
+
+  .schedule-page .module-filters > span {
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .schedule-page .week-tile {
+    min-height: 150px;
+    padding: 6px;
+  }
+
+  .schedule-page .calendar-event.milestone {
+    padding: 8px;
+  }
+
+  .schedule-page .assessment-row {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 380px) {
+  .schedule-page .week-navigator {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-page .week-tile {
+    min-height: 100px;
+  }
+}
