@@ -18,6 +18,16 @@ class DataManager:
     def __init__(self, pool: PostgresPool):
         self.pool = pool
 
+    def get_health(self) -> dict[str, str]:
+        """Check that PostgreSQL is reachable and the schema is migrated."""
+        with self.pool.connection() as connection:
+            row = connection.execute(
+                "SELECT version FROM stackplan.schema_migrations LIMIT 1"
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("Database schema migrations have not been applied.")
+        return {"status": "ok"}
+
     def create_project(self, name: str, week_count: int) -> Project:
         """Store a new project and return its initial state."""
         project = Project(str(uuid4()), name, week_count)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
@@ -30,7 +32,10 @@ class IOManager:
         @app.get("/health")
         @app.get("/ready")
         async def health():
-            return {"status": "ok"}
+            try:
+                return await asyncio.to_thread(self.data.get_health)
+            except Exception:
+                return JSONResponse({"status": "unavailable"}, status_code=503)
 
         @app.get("/")
         async def index():
