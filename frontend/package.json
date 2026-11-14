@@ -4,9 +4,10 @@
   "type": "module",
   "scripts": {
     "test": "node --test ../tests/frontend/*.test.mjs",
-    "check": "node --check static/app.js && node --check static/input-workspace.js && node --check static/document-workspace.js && node --check static/api.js && npm test",
+    "check": "node --check static/app.js && node --check static/input-workspace.js && node --check static/document-workspace.js && node --check static/api.js && node --check loading-demo.mjs && npm test",
     "test:browser": "node ../tests/frontend/browser.mjs",
     "dev": "node dev-server.mjs",
+    "demo:loading": "node loading-demo.mjs",
     "test:calendar": "node ../tests/frontend/calendar.mjs",
     "test:loading": "node ../tests/frontend/loading.mjs",
     "test:intake": "node ../tests/frontend/intake.mjs"

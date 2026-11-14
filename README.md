@@ -46,6 +46,16 @@ docker compose --project-name stackplan-smoke down --volumes
 
 The check covers health and readiness, both pages, and creating a project and reading it back through PostgreSQL. It prints one line per check, needs no provider credentials, and exits with status 1 if any check fails. Without `STACKPLAN_DEPLOYMENT_URL` it targets `http://127.0.0.1:5173`, the default Compose port.
 
+## Preview processing states
+
+Run the isolated loading-state preview from the repository root:
+
+```sh
+npm run demo:loading --prefix frontend
+```
+
+Open the printed local URL and change the `project` query parameter to `queued`, `parsing`, `extracting`, `validating`, `success`, `failed`, `interrupted`, or `offline` to inspect each state. The preview serves the real frontend with fixture API responses; it does not start the backend, access a database, upload files, or call an AI provider. It binds to loopback port 5175 by default; set `PORT` to use another port.
+
 ## Working with the models
 
 The package exposes related model types from their subpackages. For example:
