@@ -18,7 +18,7 @@ Without `requirements.txt` installed, the HTTP endpoint tests skip themselves (t
 python scripts/test.py
 ```
 
-It runs the steps below in order and stops at the first failure: compile, Ruff, the Python unit tests, the frontend checks, and both browser regressions.
+It runs the steps below in order and stops at the first failure: compile, Ruff, the Python unit tests, the frontend checks, and all three browser regressions.
 
 ## Individual checks
 
@@ -31,6 +31,7 @@ It runs the steps below in order and stops at the first failure: compile, Ruff, 
 | Frontend checks | `npm run check --prefix frontend` | Syntax-checks the scripts, then runs `tests/frontend/*.test.mjs` with `node --test`. |
 | Loading browser regression | `npm run test:loading --prefix frontend` | Processing and loading screens in headless Chromium. |
 | Calendar browser regression | `npm run test:calendar --prefix frontend` | Calendar and list views, filters and mobile layout, using fixture API responses. |
+| Submission recovery browser regression | `npm run test:recovery --prefix frontend` | Recovers a saved project after a temporary status-poll failure and ensures no duplicate submission is sent. |
 
 The browser regressions serve the frontend from a local server on an unused loopback port and never contact the real application or a database. To use an existing Chrome or Chromium instead of the Playwright download, set `BROWSER_EXECUTABLE` to its executable path.
 
@@ -49,7 +50,7 @@ Use a dedicated project name so the run never touches the containers or volumes 
 
 - `tests/test_*.py`: Python unit tests using the standard-library `unittest` runner (`pytest` also collects them, as configured in `pytest.ini`).
 - `tests/frontend/*.test.mjs`: frontend unit tests run by `node --test`.
-- `tests/frontend/loading.mjs` and `tests/frontend/calendar.mjs`: Playwright browser regressions.
+- `tests/frontend/loading.mjs`, `tests/frontend/calendar.mjs`, `tests/frontend/recovery.mjs`: Playwright browser regressions.
 
 New Python test files must be named `test_*.py` to be discovered. New frontend unit tests must end in `.test.mjs`.
 

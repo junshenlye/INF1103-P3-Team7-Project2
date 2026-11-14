@@ -37,6 +37,7 @@ def main() -> int:
     run("Run frontend checks", "npm", "run", "check", "--prefix", "frontend")
     run("Run processing/loading browser regression", "npm", "run", "test:loading", "--prefix", "frontend")
     run("Run calendar browser regression", "npm", "run", "test:calendar", "--prefix", "frontend")
+    run("Run submission recovery browser regression", "npm", "run", "test:recovery", "--prefix", "frontend")
     print("\nAll local verification checks passed.", flush=True)
     return 0
 

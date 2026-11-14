@@ -10,7 +10,8 @@
     "demo:loading": "node loading-demo.mjs",
     "test:calendar": "node ../tests/frontend/calendar.mjs",
     "test:loading": "node ../tests/frontend/loading.mjs",
-    "test:intake": "node ../tests/frontend/intake.mjs"
+    "test:intake": "node ../tests/frontend/intake.mjs",
+    "test:recovery": "node ../tests/frontend/recovery.mjs"
   },
   "devDependencies": {
     "playwright": "1.65.0"
