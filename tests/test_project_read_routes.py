@@ -1,4 +1,4 @@
-"""Verify synchronous project reads do not block the HTTP event loop."""
+"""Verify project reads use a consistent snapshot off the event loop."""
 
 import asyncio
 from importlib.util import find_spec
@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock
 
 from src.managers.io_manager import IOManager
+from src.models.processing.project_snapshot import ProjectSnapshot
 from src.models.projects.project import Project
 
 
@@ -48,16 +49,25 @@ class ProjectReadRouteTests(unittest.TestCase):
         self.assertEqual(response.json(), projects)
         self.data.get_projects.assert_called_once_with()
 
-    def test_single_project_read_runs_off_the_event_loop(self):
-        project = Project(
-            id="project-1",
-            name="Trimester 1",
-            week_count=14,
-            status="Ready",
-            job_id="job-1",
+    def test_single_project_read_uses_snapshot_off_the_event_loop(self):
+        snapshot = ProjectSnapshot(
+            project=Project(
+                id="project-1",
+                name="Trimester 1",
+                week_count=14,
+                status="Ready",
+                job_id="job-1",
+            ),
+            modules=(),
+            assessments=(),
+            issues=(),
+            documents=(),
+            revision_id=3,
+            stale=False,
+            event_cursor=12,
         )
-        self.data.get_project.side_effect = (
-            lambda project_id: require_worker_thread(project)
+        self.data.get_project_snapshot.side_effect = (
+            lambda project_id: require_worker_thread(snapshot)
         )
 
         response = self.client.get("/api/projects/project-1")
@@ -71,9 +81,16 @@ class ProjectReadRouteTests(unittest.TestCase):
                 "week_count": 14,
                 "status": "Ready",
                 "job_id": "job-1",
+                "modules": [],
+                "assessments": [],
+                "issues": [],
+                "documents": [],
+                "revision_id": 3,
+                "stale": False,
+                "event_cursor": 12,
             },
         )
-        self.data.get_project.assert_called_once_with("project-1")
+        self.data.get_project_snapshot.assert_called_once_with("project-1")
 
 
 if __name__ == "__main__":
