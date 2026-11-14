@@ -22,8 +22,8 @@ def run(label: str, *command: str) -> None:
 
 def main() -> int:
     """Execute the same core checks used by the repository CI workflow."""
-    run("Compile Python source and tests", sys.executable, "-m", "compileall", "-q", "src", "tests", "integrations/github_actions_notifier")
-    run("Lint Python source and tests", "ruff", "check", "src", "tests", "integrations/github_actions_notifier")
+    run("Compile Python source and tests", sys.executable, "-m", "compileall", "-q", "src", "tests", "integrations/github_actions_notifier", "integrations/telegram_bot")
+    run("Lint Python source and tests", "ruff", "check", "src", "tests", "integrations/github_actions_notifier", "integrations/telegram_bot")
     run(
         "Run Python unit tests",
         sys.executable,
@@ -42,6 +42,16 @@ def main() -> int:
         "discover",
         "-s",
         "integrations/github_actions_notifier",
+        "-v",
+    )
+    run(
+        "Run Telegram group bot unit tests",
+        sys.executable,
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "integrations/telegram_bot",
         "-v",
     )
     run("Run frontend checks", "npm", "run", "check", "--prefix", "frontend")
