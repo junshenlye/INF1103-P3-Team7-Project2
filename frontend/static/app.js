@@ -1,3 +1,4 @@
+import { ProcessingEvents } from './processing-events.js';
 import { request } from './api.js?v=restricted-v2';
 import { bucket, inputView, resetInput, configureInputLimits, handleInputAction, handleInputChange, addInputFiles, saveInputModule, showInputError } from './input-workspace.js?v=desktop-dark-2';
 import { escape as e } from './html.js';
@@ -195,29 +196,34 @@ async function waitForVisiblePage() {
     document.addEventListener('visibilitychange', resume);
   });
 }
-async function waitForJob(jobId, token) {
-  while (true) {
-    await waitForVisiblePage();
-    assertCurrent(token);
-    const job = await request(`/api/jobs/${jobId}`);
-    assertCurrent(token);
-    const progressChanged = JSON.stringify(state.progress) !== JSON.stringify(job.progress || null);
-    state.progress = job.progress || null;
-    if (!['queued', 'running'].includes(job.status)) return job;
-    const activeDocument = state.progress?.documents?.find(doc => ['parsing', 'extracting'].includes(doc.state));
-    const stageDetail = processingStages.find(([key]) => key === job.stage)?.[2] || 'Processing your documents…';
-    const activity = activeDocument
-      ? `${activeDocument.state === 'parsing' ? 'Reading' : 'Extracting assessments from'} ${activeDocument.filename}`
-      : stageDetail;
-    const detail = state.progress && !state.progress.documents.some(doc => doc.state === 'unknown')
-      ? `${activity} · ${state.progress.extracted_documents} of ${state.progress.total_documents} documents extracted`
-      : activity;
-    if (state.busy && (state.busy.detail !== detail || state.busy.stage !== job.stage || progressChanged)) {
-      state.busy.detail = detail;
-      state.busy.stage = job.stage;
-      showBusy();
+async function waitForJob(jobId, projectId, token) {
+  const updates = new ProcessingEvents(projectId);
+  try {
+    while (true) {
+      await waitForVisiblePage();
+      assertCurrent(token);
+      const job = await request(`/api/jobs/${jobId}`);
+      assertCurrent(token);
+      const progressChanged = JSON.stringify(state.progress) !== JSON.stringify(job.progress || null);
+      state.progress = job.progress || null;
+      if (!['queued', 'running'].includes(job.status)) return job;
+      const activeDocument = state.progress?.documents?.find(doc => ['parsing', 'extracting'].includes(doc.state));
+      const stageDetail = processingStages.find(([key]) => key === job.stage)?.[2] || 'Processing your documents…';
+      const activity = activeDocument
+        ? `${activeDocument.state === 'parsing' ? 'Reading' : 'Extracting assessments from'} ${activeDocument.filename}`
+        : stageDetail;
+      const detail = state.progress && !state.progress.documents.some(doc => doc.state === 'unknown')
+        ? `${activity} · ${state.progress.extracted_documents} of ${state.progress.total_documents} documents extracted`
+        : activity;
+      if (state.busy && (state.busy.detail !== detail || state.busy.stage !== job.stage || progressChanged)) {
+        state.busy.detail = detail;
+        state.busy.stage = job.stage;
+        showBusy();
+      }
+      await updates.wait(JOB_POLL_INTERVAL_MS);
     }
-    await new Promise(resolve => setTimeout(resolve, JOB_POLL_INTERVAL_MS));
+  } finally {
+    updates.close();
   }
 }
 async function refreshProject(id) {
@@ -225,7 +231,7 @@ async function refreshProject(id) {
   const project = await request(`/api/projects/${id}`); assertCurrent(token); selectProject(project);
   if (state.project.status === 'Processing') {
     state.busy = { label: 'Processing your documents…', detail: 'Your submission is saved. Checking processing status…' };
-    render(); await waitForJob(state.project.job_id, token);
+    render(); await waitForJob(state.project.job_id, id, token);
     const terminal = await request(`/api/projects/${id}`); assertCurrent(token); selectProject(terminal);
   } else if (['Failed', 'Interrupted'].includes(project.status) && project.job_id) {
     const job = await request(`/api/jobs/${project.job_id}`); assertCurrent(token); state.progress = job.progress || null;
