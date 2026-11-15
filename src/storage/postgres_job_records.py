@@ -91,7 +91,7 @@ def stop_unfinished_documents(connection, job_id: str) -> None:
 
 
 def finish_job(connection, job_id: str, project_id: str, status: str) -> None:
-    """Settle ``job_id`` and its project with a terminal ``status``."""
+    """Settle a job and its project, and publish the terminal status."""
     stage = lifecycle.terminal_stage(status)
     connection.execute(
         """
@@ -103,6 +103,16 @@ def finish_job(connection, job_id: str, project_id: str, status: str) -> None:
         (status, stage, job_id),
     )
     connection.execute(
-        "UPDATE stackplan.projects SET status = %s WHERE id = %s",
+        """
+        WITH settled_project AS (
+            UPDATE stackplan.projects
+            SET status = %s, event_sequence = event_sequence + 1
+            WHERE id = %s
+            RETURNING id, status, event_sequence
+        )
+        INSERT INTO stackplan.processing_events (project_id, sequence, kind, payload)
+        SELECT id, event_sequence, 'processing.settled', jsonb_build_object('status', status)
+        FROM settled_project
+        """,
         (status, project_id),
     )
