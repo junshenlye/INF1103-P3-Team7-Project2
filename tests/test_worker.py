@@ -15,6 +15,8 @@ class WorkerEntrypointTests(unittest.IsolatedAsyncioTestCase):
             docling_url="http://docling:5001",
             gpt_base_url="https://api.example.test/v1",
             provider_timeout=30,
+            document_directory="/data/documents",
+            lease_seconds=60,
         )
         pool = object()
         docling = MagicMock()
@@ -28,7 +30,7 @@ class WorkerEntrypointTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("src.worker.open_postgres_pool", return_value=nullcontext(pool)),
-            patch("src.worker.DataManager") as data_manager,
+            patch("src.worker.PostgresWorkerData") as worker_data,
             patch("src.worker.httpx.AsyncClient", side_effect=[docling, gpt]) as client,
             patch("src.worker.AIManager", return_value=manager) as ai_manager,
             patch(
@@ -40,7 +42,7 @@ class WorkerEntrypointTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await run(settings)
 
-        data_manager.assert_called_once_with(pool)
+        worker_data.assert_called_once_with(pool, "/data/documents", 60)
         self.assertEqual(
             client.call_args_list,
             [
@@ -57,7 +59,7 @@ class WorkerEntrypointTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
         ai_manager.assert_called_once()
-        self.assertIs(ai_manager.call_args.args[0], data_manager.return_value)
+        self.assertIs(ai_manager.call_args.args[0], worker_data.return_value)
         self.assertIs(ai_manager.call_args.args[2], docling)
         self.assertIs(ai_manager.call_args.args[3], gpt)
         manager.process_next_job.assert_awaited_once_with()

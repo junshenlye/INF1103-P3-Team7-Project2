@@ -7,9 +7,9 @@ import httpx
 
 from src.config.settings import load_settings
 from src.managers.ai_manager import AIManager
-from src.managers.data_manager import DataManager
 from src.managers.logic_manager import LogicManager
 from src.storage.postgres_pool import open_postgres_pool
+from src.storage.postgres_worker_data import PostgresWorkerData
 
 
 async def run(settings=None):
@@ -17,7 +17,7 @@ async def run(settings=None):
     settings = settings or load_settings()
 
     with open_postgres_pool(settings) as pool:
-        data = DataManager(pool)
+        data = PostgresWorkerData(pool, settings.document_directory, settings.lease_seconds)
         async with (
             httpx.AsyncClient(
                 base_url=settings.docling_url,
