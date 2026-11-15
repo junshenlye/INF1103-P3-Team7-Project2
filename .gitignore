@@ -22,3 +22,7 @@ node_modules/
 
 # Local database files
 database/data/
+
+# Additional local artifacts
+/docs/
+/tests/README.md
