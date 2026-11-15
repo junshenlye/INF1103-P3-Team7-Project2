@@ -1,6 +1,6 @@
 export async function request(path, { method = 'GET', body, signal, headers = {} } = {}) {
   const options = { method, signal, headers: { ...headers } };
-  if (body instanceof FormData) options.body = body;
+  if (body instanceof FormData || body instanceof Blob) options.body = body;
   else if (body !== undefined) {
     options.headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(body);

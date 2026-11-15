@@ -137,7 +137,7 @@ async function selectModule(module, target, push = true) {
   const token = ++generation; ++drawGeneration;
   busy('Loading module evidence…'); $('details').hidden = true; text('canvas', 'Loading source…');
   try {
-    const id = module.assessments[0]?.result_id;
+    const id = module.assessments?.[0]?.result_id;
     if (!id) { text('canvas', 'This module has no published assessments.'); busy(''); return; }
     const [result, docs] = await Promise.all([request(`/api/results/${id}`), request(`/api/results/${id}/documents`)]);
     if (token !== generation) return;
@@ -158,13 +158,27 @@ async function load() {
   if (!id) { location.replace('/?view=upload'); return; }
   try {
     const loaded = await request(`/api/projects/${id}`); if (token !== generation) return; project = loaded; assessment = null; sync();
-    if (project.status !== 'Ready') {
+    const requestedDocument = params.get('document');
+    if (requestedDocument) {
+      const doc = (project.documents || []).find(d => d.document_id === requestedDocument);
+      if (!doc) throw new Error('This document is unavailable in the current submission.');
+      const source = await trace(requestedDocument);
+      if (token !== generation) return;
+      documents = [{...doc, id: doc.document_id}];
+      text('module-title', doc.module_title); text('assessment-title', doc.filename);
+      $('assessment-select').hidden = true; $('details').hidden = false;
+      text('source-text', source.elements.map(element => element.text).join('\n\n') || 'No readable source text was extracted. Inspect the original document.');
+      text('facts', (doc.issues || []).map(issue => issue.message).join(' ') || `Document understanding: ${doc.inference}`);
+      $('source-select').hidden = true;
+      await draw(documents[0]); busy(''); return;
+    }
+    if (!project.schedule) {
       const message = `${project.name}: ${project.status}. No published schedule is available. ${(project.issues || []).map(i => i.message).join(' ')}`;
       fail(message); text('canvas', message); $('return-schedule').textContent = 'Back to project'; busy(''); return;
     }
     if (project.issues?.length) fail(project.issues.map(i => i.message).join(' '));
     const target = params.get('assessment');
-    const module = target ? project.modules.find(m => m.assessments.some(a => a.id === target)) : project.modules[0];
+    const module = target ? project.modules.find(m => (m.assessments || []).some(a => a.id === target)) : project.modules[0];
     if (!module) { busy(''); if (target) throw new Error('This assessment is unavailable. Return to your schedule.'); text('canvas', 'No published modules.'); return; }
     await selectModule(module, target, false);
   } catch (error) { if (token === generation) { busy(''); fail(error.message); } }
