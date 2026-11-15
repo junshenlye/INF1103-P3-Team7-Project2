@@ -63,3 +63,6 @@ jobs:
 
       - name: Run submission recovery browser regression
         run: npm run test:recovery --prefix frontend
+
+      - name: Run document source-viewer browser regression
+        run: npm run test:browser --prefix frontend

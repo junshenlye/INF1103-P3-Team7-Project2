@@ -18,7 +18,7 @@ Without `requirements.txt` installed, the HTTP endpoint tests skip themselves (t
 python scripts/test.py
 ```
 
-It runs the steps below in order and stops at the first failure: compile, Ruff, Python and notifier unit tests, frontend checks, and all three browser regressions.
+It runs the steps below in order and stops at the first failure: compile, Ruff, Python and notifier unit tests, frontend checks, and all four browser regressions.
 
 ## Individual checks
 
@@ -32,6 +32,7 @@ It runs the steps below in order and stops at the first failure: compile, Ruff, 
 | Loading browser regression | `npm run test:loading --prefix frontend` | Processing and loading screens in headless Chromium. |
 | Calendar browser regression | `npm run test:calendar --prefix frontend` | Calendar and list views, filters and mobile layout, using fixture API responses. |
 | Submission recovery browser regression | `npm run test:recovery --prefix frontend` | Recovers a saved project after a temporary status-poll failure and ensures no duplicate submission is sent. |
+| Document source-viewer browser regression | `npm run test:browser --prefix frontend` | Checks evidence rendering, selected-value overlays, cached source traces, safe text handling, page controls and responsive layout. |
 
 The browser regressions serve the frontend from a local server on an unused loopback port and never contact the real application or a database. To use an existing Chrome or Chromium instead of the Playwright download, set `BROWSER_EXECUTABLE` to its executable path.
 
@@ -51,7 +52,7 @@ Use a dedicated project name so the run never touches the containers or volumes 
 - `tests/test_*.py`: Python unit tests using the standard-library `unittest` runner (`pytest` also collects them, as configured in `pytest.ini`).
 - `integrations/github_actions_notifier and integrations/telegram_bot/test_watch.py`: isolated notifier tests with mocked remote services.
 - `tests/frontend/*.test.mjs`: frontend unit tests run by `node --test`.
-- `tests/frontend/loading.mjs`, `tests/frontend/calendar.mjs`, `tests/frontend/recovery.mjs`: Playwright browser regressions.
+- `tests/frontend/loading.mjs`, `tests/frontend/calendar.mjs`, `tests/frontend/recovery.mjs`, and `tests/frontend/browser.mjs`: Playwright browser regressions.
 
 New Python test files must be named `test_*.py` to be discovered. New frontend unit tests must end in `.test.mjs`.
 
