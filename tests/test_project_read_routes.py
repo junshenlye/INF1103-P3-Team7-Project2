@@ -92,6 +92,20 @@ class ProjectReadRouteTests(unittest.TestCase):
         )
         self.data.get_project_snapshot.assert_called_once_with("project-1")
 
+    def test_single_project_read_records_missing_sources_before_the_snapshot(self):
+        calls = []
+        self.data.record_missing_sources.side_effect = (
+            lambda project_id: calls.append("integrity") or require_worker_thread([])
+        )
+        self.data.get_project_snapshot.side_effect = (
+            lambda project_id: calls.append("snapshot") or require_worker_thread(None)
+        )
+
+        self.client.get("/api/projects/project-1")
+
+        self.data.record_missing_sources.assert_called_once_with("project-1")
+        self.assertEqual(calls, ["integrity", "snapshot"])
+
 
 if __name__ == "__main__":
     unittest.main()
