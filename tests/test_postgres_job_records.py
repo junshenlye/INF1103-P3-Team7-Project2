@@ -57,7 +57,7 @@ class JobRecordTests(unittest.TestCase):
         self.assertIn("state IN ('queued', 'running')", sql)
         self.assertEqual(params, ("job",))
 
-    def test_finishing_sets_the_terminal_stage_and_project_status(self):
+    def test_finishing_sets_terminal_status_and_publishes_it(self):
         for status, stage in (("Ready", "complete"), ("Partial", "complete"), ("Failed", "failed"), ("Interrupted", "interrupted")):
             with self.subTest(status=status):
                 self.connection.reset_mock()
@@ -65,6 +65,9 @@ class JobRecordTests(unittest.TestCase):
                 (job_sql, job_params), (project_sql, project_params) = self.statements()
                 self.assertIn("lease_token = NULL", job_sql)
                 self.assertEqual(job_params, (status, stage, "job"))
+                self.assertIn("event_sequence = event_sequence + 1", project_sql)
+                self.assertIn("INSERT INTO stackplan.processing_events", project_sql)
+                self.assertIn("'processing.settled', jsonb_build_object('status', status)", project_sql)
                 self.assertEqual(project_params, (status, "project"))
 
     def test_non_terminal_status_is_rejected_before_writing(self):
