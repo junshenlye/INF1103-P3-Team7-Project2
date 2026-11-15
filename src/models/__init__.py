@@ -1,1 +1,1 @@
-"""Domain models used by the application."""
+"""Passive data objects carrying primitive facts and related IDs."""

@@ -1,1 +1,1 @@
-"""Stackplan application packages."""
+"""Stackplan backend entry points and shared application data."""
