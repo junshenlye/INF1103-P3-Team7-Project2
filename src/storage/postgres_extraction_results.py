@@ -60,7 +60,8 @@ class PostgresExtractionResults:
           head, and the module's earlier module-wide issues are resolved;
         - the module's succeeded document tasks drop module-wide issues and
           recompute their outcome from their saved chunks;
-        - a schedule revision listing the job's current results is recorded.
+        - a schedule revision listing the job's current results is recorded
+          and a schedule.updated event announces the revision.
 
         Returns:
             The id of the new schedule revision.
@@ -215,6 +216,21 @@ class PostgresExtractionResults:
                 "INSERT INTO stackplan.schedule_revisions (project_id, results) VALUES (%s, %s::jsonb) RETURNING id",
                 (job.project_id, _json([dict(row) for row in heads])),
             ).fetchone()["id"]
+            connection.execute(
+                """
+                WITH next_event AS (
+                    UPDATE stackplan.projects
+                    SET event_sequence = event_sequence + 1
+                    WHERE id = %s
+                    RETURNING id, event_sequence
+                )
+                INSERT INTO stackplan.processing_events (project_id, sequence, kind, payload)
+                SELECT id, event_sequence, 'schedule.updated',
+                       jsonb_build_object('revision', %s::bigint)
+                FROM next_event
+                """,
+                (job.project_id, revision),
+            )
         return revision
 
     @staticmethod

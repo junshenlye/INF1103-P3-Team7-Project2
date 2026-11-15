@@ -84,6 +84,16 @@ class PostgresExtractionResultTests(unittest.TestCase):
         self.assertEqual(self.connection.matching("SET resolved = true"), [("job", "module")])
         self.assertEqual(self.connection.matching("INSERT INTO stackplan.schedule_revisions")[0][0], "project")
 
+    def test_schedule_update_event_uses_the_new_revision_and_project_sequence(self):
+        revision = self.publish()
+
+        (revision_sql, _), (event_sql, event_params) = self.connection.statements[-2:]
+        self.assertIn("INSERT INTO stackplan.schedule_revisions", revision_sql)
+        self.assertIn("SET event_sequence = event_sequence + 1", event_sql)
+        self.assertIn("INSERT INTO stackplan.processing_events", event_sql)
+        self.assertIn("'schedule.updated', jsonb_build_object('revision', %s::bigint)", event_sql)
+        self.assertEqual(event_params, (JOB.project_id, revision))
+
     def test_review_transfers_are_stored_with_lineage(self):
         transfer = ReviewTransfer("quiz", "old-quiz", 2, facts("quiz", week=4), {"week": ["s2"]})
         self.publish(review_transfers=(transfer,))
