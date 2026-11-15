@@ -66,3 +66,21 @@ jobs:
 
       - name: Run document source-viewer browser regression
         run: npm run test:browser --prefix frontend
+
+  deployment-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Start an isolated application and PostgreSQL stack
+        run: |
+          FRONTEND_PORT=15185 docker compose --project-name stackplan-smoke up --build --detach --wait app
+
+      - name: Run black-box deployment smoke checks
+        run: STACKPLAN_DEPLOYMENT_URL=http://127.0.0.1:15185 python tests/deployment/smoke.py
+
+      - name: Stop the stack and remove its disposable volumes
+        if: always()
+        run: docker compose --project-name stackplan-smoke down --volumes
