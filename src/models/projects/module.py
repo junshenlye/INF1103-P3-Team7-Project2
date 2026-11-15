@@ -1,18 +1,9 @@
-"""Value object identifying a module submitted to a project."""
-
 from __future__ import annotations
+from dataclasses import dataclass, field
 
-from dataclasses import dataclass
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Module:
-    """A module submitted for processing as part of a project.
-
-    ``normalized_title`` supports duplicate detection within a project, and
-    ``position`` preserves the order in which modules were submitted.
-    """
-
     id: str
     project_id: str
     job_id: str
@@ -20,3 +11,8 @@ class Module:
     normalized_title: str
     credit: int
     position: int
+    _assessments: tuple["Assessment", ...] = field(default=(), repr=False, compare=False)
+
+    def get_assessments(self):
+        """Return passive references; only a manager traverses them."""
+        return self._assessments

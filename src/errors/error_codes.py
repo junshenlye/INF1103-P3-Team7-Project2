@@ -1,4 +1,4 @@
-"""Stable issue-code vocabulary shared by processing components."""
+"""Stable issue-code vocabulary, shared by all managers."""
 
 DOCUMENT_PARSE_FAILED = "document_parse_failed"
 DUPLICATE_DOCUMENT = "duplicate_document"
@@ -16,7 +16,6 @@ REQUEST_TOO_LARGE = "request_too_large"
 REVISION_CONFLICT = "revision_conflict"
 SERVICE_UNAVAILABLE = "service_unavailable"
 SOURCE_MISSING = "source_missing"
-
 CODES = frozenset(
     {
         DOCUMENT_PARSE_FAILED,
@@ -37,6 +36,5 @@ CODES = frozenset(
         SOURCE_MISSING,
     }
 )
-
 INTERRUPTION_MESSAGE = "Processing stopped before the complete schedule was published."
 PROVIDER_FAILURE_MESSAGE = "A processing service did not complete the task."

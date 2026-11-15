@@ -1,1 +1,1 @@
-"""Shared runtime configuration and application limits."""
+"""Runtime settings and shared application bounds."""

@@ -10,8 +10,8 @@ node_modules
 database/data
 test-results
 .coverage
-htmlcov
 docs/
+tests/README.md
 samples/
 .vscode/
 .ruff_cache/

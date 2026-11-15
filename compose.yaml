@@ -47,6 +47,7 @@ services:
       start_interval: 2s
   worker:
     <<: *backend
+    restart: unless-stopped
     command: ["python", "-m", "src.worker"]
     env_file:
       - path: .env
@@ -54,6 +55,8 @@ services:
     environment:
       <<: *environment
       DOCLING_URL: ${DOCLING_URL:-http://docling:5001}
+      GPT_CONCURRENCY: ${GPT_CONCURRENCY:-2}
+      DOCUMENT_WORKERS: ${DOCUMENT_WORKERS:-3}
     depends_on:
       migrate: {condition: service_completed_successfully}
   docling:

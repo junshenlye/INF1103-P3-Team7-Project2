@@ -1,29 +1,22 @@
-"""Metadata for an uploaded document stored by Stackplan."""
-
-from dataclasses import dataclass
-
-from src.models.documents.document_reference import DocumentReference
+from __future__ import annotations
+from dataclasses import dataclass, field
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Document:
-    """Identify an original upload and its location in storage."""
-
     id: str
     module_id: str
     filename: str
     media_type: str
     size: int
     checksum: str
-    storage_key: str
+    _storage_key: str
+    _sources: tuple["SourceElement", ...] = field(default=(), repr=False, compare=False)
 
-    def to_reference(self) -> DocumentReference:
-        """Return processing metadata without the internal storage key."""
-        return DocumentReference(
-            id=self.id,
-            module_id=self.module_id,
-            filename=self.filename,
-            media_type=self.media_type,
-            size=self.size,
-            checksum=self.checksum,
-        )
+    @property
+    def storage_key(self):
+        return self._storage_key
+
+    def get_sources(self):
+        """Return references wired and ownership-checked by DataManager."""
+        return self._sources
