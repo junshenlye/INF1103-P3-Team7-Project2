@@ -128,3 +128,14 @@ test('server failures are marked uncertain while client validation errors are no
     await assert.rejects(request('/api/projects'), error => error.status === 422 && !error.uncertain);
   });
 });
+
+test('replacement sends original bytes and retains uncertain acceptance', async () => {
+ const original=global.fetch;
+ try {
+  const file=new File(['replacement bytes'],'source.pdf',{type:'application/pdf'});
+  global.fetch=async (_,options)=>{assert.equal(options.body,file);assert.equal(options.headers['Content-Type'],'application/pdf');return Response.json({job_id:'job'},{status:202});};
+  await request('/api/documents/doc/replacement',{method:'POST',body:file,headers:{'Content-Type':'application/pdf'}});
+  global.fetch=async ()=>{throw new TypeError('Connection lost');};
+  await assert.rejects(request('/api/documents/doc/replacement',{method:'POST',body:file}),error=>error.uncertain===true);
+ } finally { global.fetch=original; }
+});
