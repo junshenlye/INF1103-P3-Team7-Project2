@@ -5,13 +5,9 @@ from __future__ import annotations
 import json
 
 from src.contracts.postgres_pool import PostgresPool
-from src.errors import error_codes as errors
-from src.errors.processing_error import ProcessingError
 from src.models.processing.document_task import DocumentOutcome, DocumentTask
 from src.models.processing.processing_job import ProcessingJob
-from src.storage.postgres_job_records import insert_issue, require_live_lease
-
-SUPERSEDED_MESSAGE = "This document attempt is no longer current."
+from src.storage.postgres_job_records import insert_issue, require_current_document_task
 
 
 class PostgresDocumentTaskOutcomes:
@@ -44,23 +40,7 @@ class PostgresDocumentTaskOutcomes:
                 or this attempt is no longer current.
         """
         with self.pool.connection() as connection, connection.transaction():
-            require_live_lease(connection, job)
-            current = connection.execute(
-                """
-                SELECT document_id FROM stackplan.document_tasks
-                WHERE document_id = %s AND job_id = %s AND generation = %s
-                    AND owner_token = %s AND state = 'running'
-                FOR UPDATE
-                """,
-                (task.document.id, job.id, task.generation, job.lease_token),
-            ).fetchone()
-            if current is None:
-                raise ProcessingError(
-                    errors.PROCESSING_INTERRUPTED,
-                    SUPERSEDED_MESSAGE,
-                    "document",
-                    document_id=task.document.id,
-                )
+            require_current_document_task(connection, job, task)
             succeeded = bool(outcome.records)
             state = "succeeded" if succeeded else "failed"
             connection.execute(

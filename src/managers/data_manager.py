@@ -1,6 +1,7 @@
 """Persist trimester projects and read processing progress from PostgreSQL."""
 
 import hashlib
+import json
 from uuid import uuid4
 
 from src.config.settings import Settings
@@ -20,7 +21,7 @@ from src.schemas.job_status_response import JobStatusResponse
 from src.serialization.event_cursor import parse_event_cursor
 from src.storage.original_document import open_verified_document
 from src.storage.postgres_document_originals import PostgresDocumentOriginals
-from src.storage.postgres_job_records import require_live_lease
+from src.storage.postgres_job_records import require_current_document_task, require_live_lease
 
 
 class DataManager:
@@ -422,6 +423,35 @@ class DataManager:
             metadata = dict(row)
             generation = metadata.pop("generation")
             return DocumentTask(DocumentReference(**metadata), generation)
+
+    def save_document_chunk(
+        self,
+        job: ProcessingJob,
+        task: DocumentTask,
+        index: int,
+        parse_id: str,
+        records: list[dict],
+        uncertainties: list[str],
+    ) -> None:
+        """Save validated extraction output once for the current document attempt."""
+        with self.pool.connection() as connection, connection.transaction():
+            require_current_document_task(connection, job, task)
+            connection.execute(
+                """
+                INSERT INTO stackplan.document_chunks
+                    (document_id, chunk_index, parse_id, records, uncertainties, generation)
+                VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                ON CONFLICT (document_id, chunk_index, generation) DO NOTHING
+                """,
+                (
+                    task.document.id,
+                    index,
+                    parse_id,
+                    json.dumps(records, ensure_ascii=False, allow_nan=False),
+                    json.dumps(uncertainties, ensure_ascii=False, allow_nan=False),
+                    task.generation,
+                ),
+            )
 
     def get_processing_documents(self, job_id: str, module_id: str) -> list[DocumentReference]:
         """Return document metadata for a module belonging to the job."""
