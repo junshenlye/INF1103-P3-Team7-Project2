@@ -147,6 +147,8 @@ class IOManager:
 
         @app.get("/api/projects/{project_id}")
         async def project(project_id: str):
+            # Record missing originals first so the snapshot reports them.
+            await run_in_threadpool(self.data.record_missing_sources, project_id)
             snapshot = await run_in_threadpool(
                 self.data.get_project_snapshot, project_id
             )

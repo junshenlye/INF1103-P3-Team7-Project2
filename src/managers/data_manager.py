@@ -22,6 +22,7 @@ from src.serialization.event_cursor import parse_event_cursor
 from src.storage.original_document import open_verified_document
 from src.storage.postgres_document_originals import PostgresDocumentOriginals
 from src.storage.postgres_job_records import require_current_document_task, require_live_lease
+from src.storage.postgres_source_integrity import PostgresSourceIntegrity
 
 
 class DataManager:
@@ -30,10 +31,15 @@ class DataManager:
     def __init__(self, pool: PostgresPool, *, document_directory=Settings.document_directory):
         self.pool = pool
         self.document_originals = PostgresDocumentOriginals(pool, document_directory)
+        self.source_integrity = PostgresSourceIntegrity(pool, document_directory)
 
     def open_original(self, document_id: str):
         """Open a verified original for the browser."""
         return self.document_originals.open_original(document_id)
+
+    def record_missing_sources(self, project_id: str) -> list[str]:
+        """Warn about a settled project's originals that are no longer available."""
+        return self.source_integrity.record_missing_sources(project_id)
 
     def get_document_trace(self, document_id: str) -> dict:
         """Read saved evidence and verify whether the original is still available."""
