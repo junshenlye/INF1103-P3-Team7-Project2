@@ -19,6 +19,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - run: python -m compileall -q src tests
+      - run: python scripts/check_uml.py
       - run: python scripts/test.py
       - run: npm run test:loading --prefix frontend
       - run: npm run test:calendar --prefix frontend
