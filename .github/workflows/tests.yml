@@ -25,3 +25,16 @@ jobs:
       - run: npm run test:calendar --prefix frontend
       - run: npm run test:intake --prefix frontend
       - run: npm run test:recovery --prefix frontend
+  integrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile notification integrations
+        run: python -m compileall -q integrations/github_actions_notifier integrations/telegram_bot
+      - name: Test GitHub Actions notifier
+        run: python -m unittest discover -s integrations/github_actions_notifier -v
+      - name: Test Telegram bot and installer
+        run: python -m unittest discover -s integrations/telegram_bot -v
