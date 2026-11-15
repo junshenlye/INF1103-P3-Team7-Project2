@@ -48,6 +48,7 @@ const project = {
   id: 'project-1',
   name: 'Trimester 1',
   status: 'Ready',
+  schedule: { weeks: [], unscheduled: [] },
   issues: [],
   modules: [{
     module_title: 'INF1103',
