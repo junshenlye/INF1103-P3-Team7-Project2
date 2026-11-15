@@ -1,1 +1,1 @@
-"""Strict JSON decoding helpers."""
+"""Strict wire-data encoding and decoding helpers."""

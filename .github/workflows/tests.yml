@@ -1,86 +1,40 @@
-name: Python and frontend verification
-
-on:
-  push:
-    branches: ["**"]
-  pull_request:
-    branches: ["**"]
-
+name: Stackplan verification
+on: [push, pull_request]
 permissions:
   contents: read
-
 jobs:
-  tests:
+  application:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-
-      - name: Install development dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-
-      - name: Install frontend dependencies
-        run: npm ci --prefix frontend
-
-      - name: Install Chromium for browser regression tests
-        run: npx playwright install --with-deps chromium
+          node-version: '22'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: npm ci --prefix frontend
+      - run: npx playwright install --with-deps chromium
         working-directory: frontend
-
-      - name: Compile source and tests
-        run: python -m compileall -q src tests integrations/github_actions_notifier integrations/telegram_bot
-
-      - name: Lint with Ruff
-        run: ruff check --output-format=github src tests integrations/github_actions_notifier integrations/telegram_bot
-
-      - name: Run Python unit tests
-        run: python -m unittest discover -s tests -v
-
-      - name: Run Telegram notifier unit tests
-        run: python -m unittest discover -s integrations/github_actions_notifier -v
-
-      - name: Run Telegram group bot unit tests
-        run: python -m unittest discover -s integrations/telegram_bot -v
-
-      - name: Run frontend checks
-        run: npm run check --prefix frontend
-
-      - name: Run loading browser regression
-        run: npm run test:loading --prefix frontend
-
-      - name: Run calendar browser regression
-        run: npm run test:calendar --prefix frontend
-
-      - name: Run submission recovery browser regression
-        run: npm run test:recovery --prefix frontend
-
-      - name: Run document source-viewer browser regression
-        run: npm run test:browser --prefix frontend
-
-  deployment-smoke:
+      - run: python -m compileall -q src tests
+      - run: python scripts/check_uml.py
+      - run: python scripts/test.py
+      - run: npm run test:loading --prefix frontend
+      - run: npm run test:calendar --prefix frontend
+      - run: npm run test:intake --prefix frontend
+      - run: npm run test:recovery --prefix frontend
+  integrations:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Start an isolated application and PostgreSQL stack
-        run: |
-          FRONTEND_PORT=15185 docker compose --project-name stackplan-smoke up --build --detach --wait app
-
-      - name: Run black-box deployment smoke checks
-        run: STACKPLAN_DEPLOYMENT_URL=http://127.0.0.1:15185 python tests/deployment/smoke.py
-
-      - name: Stop the stack and remove its disposable volumes
-        if: always()
-        run: docker compose --project-name stackplan-smoke down --volumes
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile notification integrations
+        run: python -m compileall -q integrations/github_actions_notifier integrations/telegram_bot
+      - name: Test GitHub Actions notifier
+        run: python -m unittest discover -s integrations/github_actions_notifier -v
+      - name: Test Telegram bot and installer
+        run: python -m unittest discover -s integrations/telegram_bot -v

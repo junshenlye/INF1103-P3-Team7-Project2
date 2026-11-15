@@ -1,10 +1,11 @@
-"""Safe domain exception that does not expose provider or transport details."""
+from __future__ import annotations
 
-from src.errors.error_codes import CODES, PROVIDER_FAILURE_MESSAGE, PROVIDER_UNAVAILABLE
+
+from src.errors.error_codes import CODES
 
 
 class ProcessingError(Exception):
-    """A stable processing failure with optional related domain identifiers."""
+    """A safe domain failure, without transport or provider details."""
 
     def __init__(self, code, message, scope="request", **related_ids):
         if code not in CODES:
@@ -15,16 +16,10 @@ class ProcessingError(Exception):
         self.scope = scope
         self.related_ids = related_ids
 
-
-def safe_processing_error(error):
-    """Return ``error`` if it is a ProcessingError, otherwise a generic system failure.
-
-    Unexpected exceptions from providers, parsers or transports can carry
-    internal details such as URLs, response bodies or file paths. Those
-    details are never copied: the replacement only says that a processing
-    service did not complete the task. Callers should chain the original
-    exception (``raise ... from error``) to keep it available for logs.
-    """
-    if isinstance(error, ProcessingError):
-        return error
-    return ProcessingError(PROVIDER_UNAVAILABLE, PROVIDER_FAILURE_MESSAGE, "system")
+    def to_issue(self, *, severity='error', job_id=None, module_id=None, document_id=None):
+        """Return safe primitive issue data; never expose rejected provider payloads."""
+        related = {'job_id': job_id, 'module_id': module_id,
+                   'document_id': document_id, **self.related_ids}
+        return {'code': self.code, 'message': self.message, 'scope': self.scope,
+                'severity': severity, 'job_id': related.get('job_id'),
+                'module_id': related.get('module_id'), 'document_id': related.get('document_id')}

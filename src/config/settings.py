@@ -1,79 +1,68 @@
-"""Validated runtime settings loaded from the process environment."""
-
+from src.config import limits
 from dataclasses import dataclass
 import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from src.config import limits
-
 
 @dataclass(frozen=True)
 class Settings:
-    """Immutable application settings with validation at construction time."""
-
     database_url: str
-    document_directory: Path = Path("/data/documents")
+    document_directory: Path
     pool_size: int = limits.POOL_SIZE
-    provider_timeout: float = limits.PROVIDER_TIMEOUT
-    lease_seconds: int = limits.LEASE_SECONDS
+    request_bytes: int = limits.REQUEST_BYTES
+    document_bytes: int = limits.DOCUMENT_BYTES
     chunk_bytes: int = limits.CHUNK_BYTES
     max_chunks: int = limits.CHUNK_COUNT
+    provider_timeout: float = limits.PROVIDER_TIMEOUT
+    lease_seconds: int = limits.LEASE_SECONDS
     gpt_api_key: str = ""
     gpt_base_url: str = "https://api.openai.com/v1"
     gpt_model: str = ""
     gpt_concurrency: int = 2
     document_workers: int = 3
     docling_url: str = "http://docling:5001"
-    request_bytes: int = limits.REQUEST_BYTES
-    document_bytes: int = limits.DOCUMENT_BYTES
 
     def __post_init__(self):
-        if urlparse(self.database_url).scheme not in {"postgres", "postgresql"}:
+        self.validate()
+
+    def validate(self):
+        if not 1 <= self.gpt_concurrency <= 8 or not 1 <= self.document_workers <= 8:
+            raise ValueError("Worker concurrency must be between 1 and 8.")
+        if urlparse(self.database_url).scheme not in {"postgresql", "postgres"}:
             raise ValueError("DATABASE_URL must identify PostgreSQL.")
-        if not isinstance(self.document_directory, Path) or not self.document_directory.is_absolute():
-            raise ValueError("DOCUMENT_DIRECTORY must be an absolute path.")
-        if not 1 <= self.pool_size <= limits.MAX_POOL_SIZE:
-            raise ValueError("DATABASE_POOL_SIZE is outside the supported range.")
-        if self.lease_seconds < limits.MIN_LEASE_SECONDS:
-            raise ValueError("JOB_LEASE_SECONDS is below the supported minimum.")
-        if not limits.MIN_CHUNK_BYTES <= self.chunk_bytes <= limits.MAX_CHUNK_BYTES:
-            raise ValueError("CHUNK_BYTES is outside the supported range.")
-        if not 1 <= self.max_chunks <= limits.MAX_CHUNK_COUNT:
-            raise ValueError("MAX_CHUNKS is outside the supported range.")
-        if not 0 < self.provider_timeout <= limits.MAX_PROVIDER_TIMEOUT:
-            raise ValueError("PROVIDER_TIMEOUT is outside the supported range.")
-        if not 1 <= self.gpt_concurrency <= 8:
-            raise ValueError("GPT_CONCURRENCY must be between 1 and 8.")
-        if not 1 <= self.document_workers <= 8:
-            raise ValueError("DOCUMENT_WORKERS must be between 1 and 8.")
+        if not Path(self.document_directory).is_absolute():
+            raise ValueError("DOCUMENT_DIRECTORY must be absolute.")
         if (
-            type(self.document_bytes) is not int
-            or type(self.request_bytes) is not int
-            or not 0 < self.document_bytes <= self.request_bytes <= limits.REQUEST_BYTES
+            not 1 <= self.pool_size <= limits.MAX_POOL_SIZE
+            or self.lease_seconds < limits.MIN_LEASE_SECONDS
         ):
+            raise ValueError("Invalid connection pool or lease bounds.")
+        if (
+            not limits.MIN_CHUNK_BYTES <= self.chunk_bytes <= limits.MAX_CHUNK_BYTES
+            or not 1 <= self.max_chunks <= limits.MAX_CHUNK_COUNT
+        ):
+            raise ValueError("Invalid parse bounds.")
+        if not 0 < self.document_bytes <= self.request_bytes <= limits.REQUEST_BYTES:
             raise ValueError("Invalid upload bounds.")
-        for name, value in (("GPT_BASE_URL", self.gpt_base_url), ("DOCLING_URL", self.docling_url)):
-            parsed = urlparse(value)
-            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-                raise ValueError(f"{name} must be an absolute HTTP(S) URL.")
+        if not 0 < self.provider_timeout <= limits.MAX_PROVIDER_TIMEOUT:
+            raise ValueError("Invalid provider timeout.")
+        if urlparse(self.docling_url).scheme not in {"http", "https"}:
+            raise ValueError("Invalid Docling URL.")
+        if urlparse(self.gpt_base_url).scheme not in {"http", "https"}:
+            raise ValueError("Invalid GPT URL.")
 
 
-def load_settings(environ=None):
-    """Build validated settings from an environment mapping or os.environ."""
-    env = os.environ if environ is None else environ
+def load_settings():
     return Settings(
-        database_url=env["DATABASE_URL"],
-        document_directory=Path(env.get("DOCUMENT_DIRECTORY", "/data/documents")),
-        pool_size=int(env.get("DATABASE_POOL_SIZE", str(limits.POOL_SIZE))),
-        provider_timeout=float(env.get("PROVIDER_TIMEOUT", str(limits.PROVIDER_TIMEOUT))),
-        lease_seconds=int(env.get("JOB_LEASE_SECONDS", str(limits.LEASE_SECONDS))),
-        chunk_bytes=int(env.get("CHUNK_BYTES", str(limits.CHUNK_BYTES))),
-        max_chunks=int(env.get("MAX_CHUNKS", str(limits.CHUNK_COUNT))),
-        gpt_api_key=env.get("GPT_API_KEY") or env.get("OPENAI_API_KEY", ""),
-        gpt_base_url=env.get("GPT_BASE_URL", "https://api.openai.com/v1"),
-        gpt_model=env.get("GPT_MODEL") or env.get("OPENAI_MODEL", ""),
-        gpt_concurrency=int(env.get("GPT_CONCURRENCY", "2")),
-        document_workers=int(env.get("DOCUMENT_WORKERS", "3")),
-        docling_url=env.get("DOCLING_URL", "http://docling:5001"),
+        database_url=os.environ["DATABASE_URL"],
+        document_directory=Path(os.getenv("DOCUMENT_DIRECTORY", "/data/documents")),
+        pool_size=int(os.getenv("DATABASE_POOL_SIZE", str(limits.POOL_SIZE))),
+        lease_seconds=int(os.getenv("JOB_LEASE_SECONDS", str(limits.LEASE_SECONDS))),
+        gpt_api_key=os.getenv("GPT_API_KEY") or os.getenv("OPENAI_API_KEY", ""),
+        gpt_base_url=os.getenv("GPT_BASE_URL", "https://api.openai.com/v1"),
+        gpt_model=os.getenv("GPT_MODEL") or os.getenv("OPENAI_MODEL", ""),
+        gpt_concurrency=int(os.getenv("GPT_CONCURRENCY", "2")),
+        document_workers=int(os.getenv("DOCUMENT_WORKERS", "3")),
+        docling_url=os.getenv("DOCLING_URL", "http://docling:5001"),
     )

@@ -1,47 +1,35 @@
-"""Schedule read model for assessment items."""
-
 from __future__ import annotations
-
+from dataclasses import dataclass, field
 from copy import deepcopy
-from dataclasses import dataclass
 
 
-@dataclass
-class ScheduleWeek:
-    """The scheduled assessment items for one numbered teaching week."""
-
-    week: int
-    items: list
-
-
-@dataclass
+@dataclass(eq=False)
 class Schedule:
-    """Owns schedule weeks and detached assessment display items."""
+    """Owns primitive calendar values; never receives another domain object."""
 
     project_id: str
     week_count: int
-    weeks: list[ScheduleWeek]
-    unscheduled: list
+    _weeks: dict = field(init=False, repr=False)
+    _undated: list = field(default_factory=list, init=False, repr=False)
 
-    @classmethod
-    def empty(cls, project_id: str, week_count: int) -> Schedule:
-        """Create an empty schedule with one container per teaching week."""
-        if week_count < 1:
-            raise ValueError("A schedule must contain at least one week.")
-        return cls(
-            project_id=project_id,
-            week_count=week_count,
-            weeks=[ScheduleWeek(number, []) for number in range(1, week_count + 1)],
-            unscheduled=[],
-        )
+    def __post_init__(self):
+        if type(self.week_count) is not int or self.week_count < 1:
+            raise ValueError('A schedule needs a positive integer week count.')
+        self._weeks = {number: [] for number in range(1, self.week_count + 1)}
 
-    def add_unscheduled(self, item: dict) -> None:
-        """Append an item whose timing is not yet known."""
-        self.unscheduled.append(deepcopy(item))
+    def add_undated(self, record):
+        self._undated.append(deepcopy(record))
 
-    def add_in_weeks(self, item: dict, start: int, end: int) -> None:
-        """Place a detached item in every inclusive week of its timing range."""
-        if not 1 <= start <= end <= self.week_count:
+    def add_item(self, record, start, end):
+        if type(start) is not int or type(end) is not int or not 1 <= start <= end <= self.week_count:
             raise ValueError("Assessment weeks are outside this schedule.")
         for number in range(start, end + 1):
-            self.weeks[number - 1].items.append(deepcopy(item))
+            self._weeks[number].append(deepcopy(record))
+
+    def to_record(self):
+        return {
+            'project_id': self.project_id,
+            'week_count': self.week_count,
+            'weeks': [{'week': number, 'items': deepcopy(items)} for number, items in self._weeks.items()],
+            'unscheduled': deepcopy(self._undated),
+        }
