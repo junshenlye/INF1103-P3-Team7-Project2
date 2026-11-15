@@ -1,239 +1,398 @@
-// Browser regression for source evidence, citation overlays and the document viewer.
+// Project 2's preserved UI -> real API/storage/PostgreSQL/worker; providers are deterministic.
 import assert from 'node:assert/strict';
-import http from 'node:http';
-import path from 'node:path';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-
-import { chromium } from '../../frontend/node_modules/playwright/index.mjs';
-
-const frontendRoot = fileURLToPath(new URL('../../frontend/', import.meta.url));
-const contentTypes = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-};
-
-const server = http.createServer(async (request, response) => {
-  const pathname = new URL(request.url, 'http://localhost').pathname;
-  const relative = pathname === '/documents'
-    ? 'templates/documents.html'
-    : pathname.startsWith('/static/')
-      ? pathname.slice(1)
-      : '';
-
-  if (!relative || relative.split('/').includes('..')) {
-    response.writeHead(404).end();
-    return;
-  }
-
-  try {
-    const body = await readFile(path.join(frontendRoot, relative));
-    response.writeHead(200, {
-      'Content-Type': contentTypes[path.extname(relative)] || 'application/octet-stream',
-      'Cache-Control': 'no-store',
-    });
-    response.end(body);
-  } catch {
-    response.writeHead(404).end();
-  }
-});
-
-const image = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jg2kAAAAASUVORK5CYII=',
-  'base64',
-);
-
-const project = {
-  id: 'project-1',
-  name: 'Trimester 1',
-  status: 'Ready',
-  schedule: { weeks: [], unscheduled: [] },
-  issues: [],
-  modules: [{
-    module_title: 'INF1103',
-    assessments: [{ id: 'assessment-1', result_id: 'result-1' }],
-  }],
-};
-
-const result = {
-  assessments: [{
-    id: 'assessment-1',
-    facts: {
-      name: 'Final exam',
-      week: 12,
-      end_week: 12,
-      weight_percent: 40,
-      weight_scope: 'module',
-      parent_key: null,
-      kind: 'individual',
-    },
-    evidence: {
-      name: ['name-value', 'header-context'],
-      week: ['week-value'],
-      end_week: [],
-      weight_percent: ['weight-value', 'header-context'],
-      weight_scope: ['header-context'],
-    },
-  }],
-};
-
-const documents = [{
-  id: 'document-1',
-  filename: 'INF1103-assessment.png',
-  media_type: 'image/png',
-}];
-
-const trace = {
-  document_id: 'document-1',
-  original_available: true,
-  elements: [
-    {
-      id: 'name-value',
-      text: 'Final exam <img src=x onerror=alert(1)>',
-      regions: [{
-        page: 1,
-        bbox: [0.1, 0.1, 0.3, 0.2],
-        coordinate_origin: 'TOPLEFT',
-      }],
-    },
-    {
-      id: 'week-value',
-      text: 'Week 12',
-      regions: [{
-        page: 1,
-        bbox: [0.4, 0.1, 0.6, 0.2],
-        coordinate_origin: 'TOPLEFT',
-      }],
-    },
-    {
-      id: 'weight-value',
-      text: '40%',
-      regions: [{
-        page: 1,
-        bbox: [0.2, 0.4, 0.4, 0.5],
-        coordinate_origin: 'TOPLEFT',
-      }],
-    },
-    {
-      id: 'header-context',
-      text: 'Assessment | Due | Weight',
-      regions: [{
-        page: 1,
-        bbox: [0.05, 0.02, 0.8, 0.08],
-        coordinate_origin: 'TOPLEFT',
-        role: 'column_header',
-      }],
-    },
-  ],
-};
-
-await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-
-let browser;
-try {
-  browser = await chromium.launch({
-    headless: true,
-    ...(process.env.BROWSER_EXECUTABLE
-      ? { executablePath: process.env.BROWSER_EXECUTABLE }
-      : {}),
-  });
-
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  const pageErrors = [];
-  let traceReads = 0;
-  let writes = 0;
-  page.on('pageerror', error => pageErrors.push(error.message));
-
-  await page.route('**/api/**', async route => {
-    const request = route.request();
-    const pathname = new URL(request.url()).pathname;
-
-    if (request.method() !== 'GET') {
-      writes++;
-      return route.fulfill({
-        status: 405,
-        json: { issues: [{ message: 'The source viewer must remain read-only.' }] },
-      });
-    }
-
-    if (pathname === '/api/projects/project-1') {
-      return route.fulfill({ json: project });
-    }
-    if (pathname === '/api/results/result-1') {
-      return route.fulfill({ json: result });
-    }
-    if (pathname === '/api/results/result-1/documents') {
-      return route.fulfill({ json: documents });
-    }
-    if (pathname === '/api/documents/document-1/trace') {
-      traceReads++;
-      return route.fulfill({ json: trace });
-    }
-    if (pathname === '/api/documents/document-1/original') {
-      return route.fulfill({ status: 200, contentType: 'image/png', body: image });
-    }
-
-    return route.fulfill({
-      status: 404,
-      json: { issues: [{ message: 'Unexpected source-viewer API request.' }] },
-    });
-  });
-
-  const origin = 'http://127.0.0.1:' + server.address().port;
-  await page.goto(origin + '/documents?project=project-1&assessment=assessment-1&field=weight_percent');
-
-  await page.locator('#module-title').filter({ hasText: 'INF1103' }).waitFor();
-  await page.locator('#assessment-title').filter({ hasText: 'Final exam' }).waitFor();
-  await page.locator('.paper img').waitFor();
-  await page.locator('.highlight').waitFor();
-
-  assert.equal(traceReads, 1, 'The selected module source trace is fetched once and cached');
-  assert.equal(await page.locator('#facts [data-field]').count(), 3);
-  assert.equal(await page.locator('#facts [data-field="weight_percent"]').getAttribute('aria-pressed'), 'true');
-  assert.equal(await page.locator('#source-text [data-evidence-role="supporting"]').count(), 1);
-  assert.equal(await page.locator('#source-text img').count(), 0, 'Untrusted source text is rendered as text, not HTML');
-  assert.match(await page.locator('#source-text').innerText(), /40%/);
-  assert.match(await page.locator('#source-text').innerText(), /Assessment \| Due \| Weight/);
-
-  const highlights = page.locator('.highlight');
-  assert.equal(await highlights.count(), 1, 'Only the selected value receives a source overlay');
-  assert.equal(await highlights.first().evaluate(element => element.style.left), '20%');
-  assert.equal(await highlights.first().evaluate(element => element.style.top), '40%');
-  assert.equal(await page.locator('.context-highlight').count(), 0, 'Column headings remain supporting context');
-
-  assert.equal(await page.locator('#source-links button').count(), 1, 'Evidence on the same page shares one page control');
-  await page.locator('#source-links button').click();
-  await page.locator('.highlight').waitFor();
-  assert.equal(await page.locator('.highlight').count(), 1);
-  assert.equal(await page.locator('#original').getAttribute('href'), '/api/documents/document-1/original');
-  assert.equal(await page.locator('#original').getAttribute('aria-disabled'), null);
-
-  await page.locator('#facts [data-field="name"]').click();
-  await page.locator('#source-text').filter({ hasText: 'Final exam' }).waitFor();
-  await page.locator('.highlight').waitFor();
-  assert.equal(traceReads, 1, 'Changing facts reuses the cached source trace');
-  assert.equal(await page.locator('.highlight').count(), 1);
-  assert.equal(await page.locator('#source-text img').count(), 0);
-
-  const back = new URL(await page.locator('#return-schedule').getAttribute('href'), origin);
-  assert.equal(back.pathname, '/');
-  assert.equal(back.searchParams.get('project'), 'project-1');
-  assert.equal(back.searchParams.get('assessment'), 'assessment-1');
-  assert.equal(back.searchParams.get('view'), 'schedule');
-
-  for (const width of [1280, 768, 390, 320]) {
-    await page.setViewportSize({ width, height: 900 });
-    assert.ok(
-      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-      'Source viewer has no horizontal page overflow at ' + width + 'px',
-    );
-  }
-
-  assert.equal(writes, 0, 'Inspecting source evidence never changes server data');
-  assert.deepEqual(pageErrors, []);
-  console.log('PASS source evidence, selected-value overlays, cached traces, safe text rendering, page controls, return navigation and responsive layout');
-} finally {
-  if (browser) await browser.close();
-  await new Promise(resolve => server.close(resolve));
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || '../../frontend/node_modules/playwright/index.mjs');
+const api = process.env.BROWSER_API_URL || 'http://127.0.0.1:18083';
+const frontend = process.env.FRONTEND_URL || api;
+const browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const errors = []; page.on('pageerror', error => errors.push(error.message));
+const bytes = Buffer.from(await (await fetch(`${api}/__test__/image`)).arrayBuffer());
+const image = { name: 'assessment.png', mimeType: 'image/png', buffer: bytes };
+const counts = async () => (await fetch(`${api}/__test__/counts`)).json();
+const mode = async value => fetch(`${api}/__test__/mode`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: value }) });
+async function fill(name, file = image) {
+  await page.goto(frontend);
+  await page.locator('#trimester-name').fill(name);
+  await page.getByLabel('Module title').fill('INF1103');
+  await page.locator('#module-images').setInputFiles(file);
+  await page.getByRole('button', { name: 'Add module' }).click();
+  await page.getByRole('button', { name: 'Edit INF1103', exact: true }).waitFor();
 }
+async function build() {
+  const review = page.getByRole('button', {name:'Review documents',exact:true});
+  if (await review.isVisible()) await review.click();
+  await page.getByRole('button', { name: 'Build assessment schedule' }).click();
+}
+async function ready() { await page.getByRole('heading', { name: 'Your assessment schedule' }).waitFor(); }
+async function openSource() {
+  await page.locator('[data-document-preview]:visible').first().click();
+  await page.waitForURL('**/documents?**');
+  return page;
+}
+let passed = 0;
+try {
+  await fill('Project 2 browser success');
+  const formLimits = await (await fetch(`${api}/api/limits`)).json();
+  assert.equal(formLimits.document_bytes, 2 * 1024 * 1024);
+  assert.match(await page.locator('#file-help').innerText(), /2 MB each/);
+  assert.match(await page.locator('#file-help').innerText(), /8 MB complete upload/);
+  assert.equal(await page.locator('#week-count').count(),0, 'New trimesters have no editable week count');
+  await page.getByRole('button',{name:'Review documents',exact:true}).click();
+  assert.equal((await counts()).jobs,0,'Review does not upload files or create a job');
+  assert.match(await page.getByRole('region',{name:'Submission review'}).innerText(),/assessment.png/);
+  await page.getByRole('button',{name:'Back to modules',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Edit INF1103',exact:true}).isVisible(),true);
+  await page.getByRole('button',{name:'Review documents',exact:true}).click();
+  await page.screenshot({path:'/tmp/stackplan-dark-review.png',fullPage:true});
+  await page.locator('[data-action=build-schedule]').evaluate(button => { button.click(); button.click(); });
+  await ready();
+  assert.equal(await page.locator('.week-heading').count(), 14);
+  assert.equal(await page.locator('#module-form').count(), 0);
+  const createdProject = await (await fetch(`${api}/api/projects/${new URL(page.url()).searchParams.get('project')}`)).json();
+  assert.equal(createdProject.week_count,14);
+  assert.ok(await page.locator('.week-navigator').evaluate(el => el.scrollWidth <= el.clientWidth),'All weeks fit without inner scrolling');
+  const originalCounts = await counts(); assert.equal(originalCounts.jobs, 1); assert.equal(originalCounts.gpt_calls, 1);
+  await page.getByRole('button',{name:'Week 12, 1 assessments',exact:true}).click();
+  const source = await openSource();
+  assert.equal(await source.locator('#project, #add, .sidebar').count(),0,'Evidence has no workspace navigation');
+  await source.locator('#assessment-title').filter({ hasText: 'Final exam' }).waitFor();
+  await source.locator('.highlight').first().waitFor();
+  const sourceUrl = page.url();
+  const traceReads = [];
+  const watchTrace = request => { if (new URL(request.url()).pathname.endsWith('/trace')) traceReads.push(request.url()); };
+  page.on('request', watchTrace);
+  await source.locator('.fact').nth(1).click();
+  await source.locator('#source-text').filter({hasText:'Week 12'}).waitFor();
+  await source.locator('.fact').first().click();
+  await source.locator('.highlight').first().waitFor();
+  assert.equal(traceReads.length, 0, 'selected module trace cache prevents repeat downloads');
+  page.removeListener('request',watchTrace);
+  await page.screenshot({path:'/tmp/stackplan-source-desktop.png',fullPage:true});
+  await page.reload();
+  await page.locator('#assessment-title').filter({hasText:'Final exam'}).waitFor();
+  assert.equal(page.url(),sourceUrl);
+  await source.locator('#source-text p').filter({hasText:'Final exam in Week 12'}).waitFor();
+  assert.match(await source.locator('#source-text').innerText(), /Final exam in Week 12/);
+  await source.locator('#canvas img').waitFor();
+  const href = await source.locator('#canvas img').getAttribute('src');
+  assert.deepEqual(Buffer.from(await (await fetch(new URL(href, frontend))).arrayBuffer()), bytes);
+  await page.getByRole('link', { name: 'Back to schedule' }).click();
+  await ready();
+  assert.equal(await page.evaluate(() => document.activeElement.matches('[data-document-preview]')),true);
+  assert.equal(new URL(page.url()).searchParams.get('week'),'12','Source return preserves selected week');
+  await page.reload(); await ready(); assert.deepEqual(await counts(), originalCounts);
+  assert.equal(await page.evaluate(() => localStorage.length), 0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  passed++; console.log('PASS Project 2 UI, original bytes, exact-source highlight, reload and mobile layout');
+
+  const projectId = new URL(page.url()).searchParams.get('project');
+  await fetch(`${api}/__test__/missing/${projectId}`, { method: 'POST' });
+  await page.reload(); await ready();
+  assert.match(await page.getByRole('region', { name: 'Source availability' }).innerText(), /original document is unavailable/i);
+  const missingSource = await openSource();
+  await missingSource.locator('#canvas').filter({ hasText: 'Original unavailable' }).waitFor();
+  assert.match(await missingSource.locator('#source-text').innerText(), /Week 12/);
+  assert.equal(await missingSource.locator('#canvas img').count(), 0);
+  await page.getByRole('link', { name: 'Back to schedule' }).click();
+  passed++; console.log('PASS persistent Ready warning preserves schedule and parsed evidence');
+
+  await fill('Rejected source', { name: 'spoof.png', mimeType: 'image/png', buffer: Buffer.from('not an image') });
+  await build(); await page.getByRole('alert').filter({ hasText: /readable PDF/ }).waitFor();
+  assert.equal(await page.locator('.bucket-card').count(), 1); assert.equal((await counts()).jobs, 1);
+  await page.getByRole('button', { name: 'Edit INF1103', exact: true }).click();
+  await page.locator('[data-action="input-remove-file"]').click();
+  await page.locator('#module-images').setInputFiles(image);
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await build(); await ready();
+  passed++; console.log('PASS rejected upload retains the browser bucket and accepts its correction');
+
+  await mode('failure'); await fill('Accepted failure'); await build();
+  await page.getByRole('heading', { name: 'We could not finish processing' }).waitFor();
+  assert.equal(await page.locator('.term-map').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Retry document', exact: true }).count(), 1);
+  assert.match(await page.locator('.terminal-failure').innerText(), /No usable assessments are available yet/);
+  const failedCounts = await counts(); await page.reload();
+  await page.getByRole('heading', { name: 'We could not finish processing' }).waitFor(); assert.deepEqual(await counts(), failedCounts);
+  const failedId = new URL(page.url()).searchParams.get('project');
+  await page.goto(`${frontend}/documents?project=${failedId}`);
+  await page.locator('#error').filter({hasText: 'Failed'}).waitFor({state:'visible'});
+  assert.equal(await page.locator('#details').isVisible(), false);
+  await page.goto(`${frontend}/?project=${failedId}`);
+  await mode('success');
+  await page.getByRole('button', {name: 'Retry document', exact: true}).click();
+  await ready();
+  const retriedCounts = await counts();
+  assert.equal(retriedCounts.docling_calls, failedCounts.docling_calls, 'Retry reuses saved OCR');
+  assert.equal(retriedCounts.gpt_calls, failedCounts.gpt_calls + 1);
+  passed++; console.log('PASS failed sources remain inspectable and retryable');
+
+  await mode('success'); await fill('Lost acceptance response'); const beforeLost = await counts();
+  await page.route('**/api/projects/*/process', async route => { const accepted = await route.fetch(); assert.equal(accepted.status(), 202); await route.abort('failed'); }, { times: 1 });
+  await build(); await page.getByRole('button', { name: 'Check submission status' }).waitFor();
+  await page.getByRole('button', { name: 'Check submission status' }).click(); await ready();
+  const afterLost = await counts(); assert.equal(afterLost.jobs, beforeLost.jobs + 1); assert.equal(afterLost.gpt_calls, beforeLost.gpt_calls + 1);
+  passed++; console.log('PASS lost 202 recovers through a project read without another inference');
+  await mode('hold'); await fill('Quiet status polling');
+  const jobReads = []; let healthReads = 0;
+  const observe = request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith('/api/jobs/')) jobReads.push(Date.now());
+    if (['/health', '/ready'].includes(path)) healthReads++;
+  };
+  const isJobResponse = response => new URL(response.url()).pathname.startsWith('/api/jobs/');
+  page.on('request', observe);
+  const firstRead = page.waitForResponse(isJobResponse);
+  await build(); await firstRead;
+  await page.waitForFunction(() => document.querySelector('[data-loading]')?.textContent.toLowerCase().includes('extracting'));
+  assert.equal(await page.locator('.processing-copy').getAttribute('role'), 'status');
+  assert.equal(await page.locator('.processing-copy').evaluate(el => Boolean(el.closest('[aria-busy=true]'))), false);
+  assert.equal(await page.locator('[data-busy]').count(), 1);
+  assert.equal(await page.locator('.processing-context').isVisible(), true);
+  assert.equal(await page.locator('[data-busy]').isVisible(), true);
+  assert.equal(await page.locator('[data-busy] .loading-documents').isVisible(), true);
+  assert.equal(await page.locator('[data-loading]').count(), 1);
+  assert.equal(await page.locator('.processing-panel .checkpoint-list').isVisible(), true);
+  assert.equal(await page.locator('.processing-panel .document-progress').count(), 0);
+  assert.match(await page.locator('.processing-copy').innerText(), /Building your schedule/);
+  assert.equal(await page.locator('h1').count(), 1);
+  // Real worker progress survives reopening the page, without another job.
+  const beforeProgressReload = await counts();
+  jobReads.length = 0; // Reload starts a fresh polling session immediately.
+  await page.reload();
+  await page.locator('.processing-detail').filter({ hasText: 'Extracting assessments' }).waitFor();
+  assert.deepEqual(await counts(), beforeProgressReload);
+  await page.screenshot({path:'/tmp/stackplan-ui-loading-verified.png',fullPage:true});
+  await page.evaluate(() => { window.__progressNode = document.querySelector('[data-loading]'); });
+  await page.waitForResponse(isJobResponse);
+  assert.equal(await page.evaluate(() => window.__progressNode === document.querySelector('[data-loading]')), true);
+  assert.ok(jobReads.length >= 2);
+  for (let i = 1; i < jobReads.length; i++) assert.ok(jobReads[i] - jobReads[i - 1] >= 1800);
+  await page.evaluate(() => {
+    window.__testHidden = true;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__testHidden });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const beforeHidden = jobReads.length;
+  await new Promise(resolve => setTimeout(resolve, 2600));
+  assert.equal(jobReads.length, beforeHidden);
+  await mode('success');
+  const resumed = page.waitForResponse(isJobResponse);
+  await page.evaluate(() => { window.__testHidden = false; document.dispatchEvent(new Event('visibilitychange')); });
+  await resumed; await ready();
+  const afterReady = jobReads.length;
+  await new Promise(resolve => setTimeout(resolve, 2300));
+  assert.equal(jobReads.length, afterReady); assert.equal(healthReads, 0);
+  page.removeListener('request', observe);
+  passed++; console.log('PASS quiet UI polling, stable progress, hidden-tab pause, resume and terminal stop');
+  await page.screenshot({path:'/tmp/stackplan-schedule-mobile.png',fullPage:true});
+  await openSource();
+  await page.locator('.highlight').first().waitFor();
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.screenshot({path:'/tmp/stackplan-source-mobile.png',fullPage:true});
+  await page.getByRole('link',{name:'Back to schedule'}).click();
+  await ready();
+  await page.goto(frontend);
+  await page.locator('#module-title').waitFor();
+  await page.screenshot({path:'/tmp/stackplan-input-mobile.png',fullPage:true});
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.setViewportSize({width:1440,height:1000});
+  await page.screenshot({path:'/tmp/stackplan-input-desktop.png',fullPage:true});
+  await page.locator('#module-title').focus(); await page.keyboard.press('Tab');
+  assert.equal(await page.locator('#module-credit').evaluate(el=>el===document.activeElement),true);
+  const colors=await page.evaluate(()=>{const s=getComputedStyle(document.documentElement); return Object.fromEntries(['--text','--muted','--surface','--surface-2','--bg','--accent','--accent-wash','--danger','--danger-wash','--warning','--warning-wash','--line-strong'].map(k=>[k,s.getPropertyValue(k).trim()]));});
+  const luminance=hex=>{const rgb=hex.slice(1).match(/../g).map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;};
+  const contrast=(a,b)=>{const values=[luminance(a),luminance(b)].sort((a,b)=>b-a);return (values[0]+.05)/(values[1]+.05);};
+  for (const foreground of ['--text','--muted']) for (const background of ['--surface','--surface-2','--bg','--accent-wash']) {
+    assert.ok(contrast(colors[foreground],colors[background])>=4.5, `${foreground} on ${background} must meet AA`);
+  }
+  for (const [foreground,background] of [['--surface','--accent'],['--accent','--accent-wash'],['--danger','--danger-wash'],['--warning','--warning-wash']]) assert.ok(contrast(colors[foreground],colors[background])>=4.5);
+  for (const background of ['--surface','--bg']) assert.ok(contrast(colors['--line-strong'],colors[background])>=3, 'Control boundaries must remain visible');
+  // Contract-shaped edge cases supplement the real-backend flows above.
+  const savedProjects = await (await fetch(`${api}/api/projects`)).json();
+  const saved = savedProjects.find(p => p.status === 'Ready');
+  const base = await (await fetch(`${api}/api/projects/${saved.id}`)).json();
+  const original = base.schedule.weeks.flatMap(w => w.items)[0];
+  const range = {...original, name:'Three-week project', week:2, end_week:4, weight_percent:25, weight_scope:'group'};
+  const undated = {...original, assessment_id:crypto.randomUUID(), name:'Undated presentation', week:null, end_week:null, weight_percent:null, weight_scope:'unknown'};
+  const fixture = {...base, week_count:6, schedule:{...base.schedule, week_count:6, weeks:Array.from({length:6},(_,i)=>({week:i+1,items:i>=1&&i<=3?[range]:[]})),unscheduled:[undated]}};
+  await page.route(`**/api/projects/${saved.id}`, route => route.fulfill({json:fixture}));
+  await page.goto(`${frontend}/?project=${saved.id}`); await ready();
+  assert.match(await page.locator('.module-filters').innerText(),/2 assessments/);
+  assert.equal(await page.locator('.assessment-row').count(),0, 'Calendar shows cards without a duplicate table');
+  assert.equal(await page.locator('.calendar-event').count(),4, 'Range appears in each covered week alongside undated work');
+  assert.equal(await page.locator('.week-tile').count(),6, 'Existing saved projects retain their actual duration');
+  await page.getByRole('button',{name:'Week 3, 1 assessments',exact:true}).click();
+  assert.equal(await page.locator('.week-tile.is-selected .calendar-event').count(),1);
+  assert.match(await page.locator('.week-tile.is-selected').innerText(),/Three-week project/);
+  await page.reload(); await ready();
+  assert.equal(await page.getByRole('button',{name:'Week 3, 1 assessments',exact:true}).getAttribute('aria-pressed'),'true');
+  await page.getByRole('button',{name:'Week 1, 0 assessments',exact:true}).click();
+  assert.match(await page.locator('.week-tile.is-selected').innerText(),/No assessments/);
+  await page.getByRole('button',{name:'Undated',exact:true}).click();
+  assert.match(await page.locator('.undated-assessments').innerText(),/Weight|Unknown/);
+  assert.match(await page.locator('.undated-assessments').innerText(),/Undated presentation/);
+  await page.getByRole('button',{name:'Show all weeks',exact:true}).click();
+  await page.getByRole('button',{name:'List',exact:true}).click();
+  assert.equal(await page.locator('.schedule-list [data-document-preview]:visible').count(),2, 'List deduplicates assessments across weeks');
+  assert.match(await page.locator('.assessment-agenda').innerText(),/25% of group/);
+  assert.match(await page.locator('.assessment-agenda').innerText(),/Weight unknown/);
+  await page.getByRole('button',{name:'List',exact:true}).click();
+  assert.equal(await page.locator('.term-map').isVisible(),false);
+  await page.reload(); await ready();
+  assert.equal(await page.getByRole('button',{name:'List',exact:true}).getAttribute('aria-pressed'),'true');
+  await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.match(await page.getByRole('region',{name:'Assessments by due week'}).innerText(),/Weeks 2–4/);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await page.locator('.milestone').first().evaluate(el => getComputedStyle(el).animationName),'none');
+  for (const status of ['Created','Processing','Failed','Interrupted']) {
+    fixture.status=status; fixture.schedule=null;
+    await page.goto(`${frontend}/documents?project=${saved.id}`);
+    await page.locator('#error').filter({hasText:status}).waitFor({state:'visible'});
+    assert.equal(await page.locator('#details').isVisible(),false);
+    assert.equal(await page.locator('#return-schedule').isVisible(),true);
+  }
+  fixture.status='Interrupted';
+  await page.goto(`${frontend}/?project=${saved.id}`);
+  await page.getByRole('heading',{name:'Processing was interrupted'}).waitFor();
+  assert.equal(await page.locator('.term-map').count(),0);
+  fixture.status='Processing';
+  let navigationJobReads=0;
+  await page.route(`**/api/jobs/${fixture.job_id}`, route => { navigationJobReads++; return route.fulfill({json:{id:fixture.job_id,status:'running',stage:'extracting',issues:[]}}); });
+  await page.goto(frontend); await page.locator('#module-title').waitFor();
+  await page.evaluate(id => { history.pushState(null,'',`/?project=${id}`); dispatchEvent(new PopStateEvent('popstate')); },saved.id);
+  await page.waitForResponse(response=>new URL(response.url()).pathname===`/api/jobs/${fixture.job_id}`);
+  await page.locator('.processing-context [data-busy]').waitFor();
+  assert.doesNotMatch(await page.locator('[data-busy]').innerText(), /Opening your workspace/);
+  await page.goBack(); await page.locator('#module-title').waitFor();
+  const readsAtReturn=navigationJobReads;
+  await page.waitForTimeout(2300);
+  assert.equal(navigationJobReads,readsAtReturn,'back navigation stops the previous job polling loop');
+  await page.unroute(`**/api/jobs/${fixture.job_id}`);
+  await page.unroute(`**/api/projects/${saved.id}`);
+  passed++; console.log('PASS range deduplication, group scope, unknown weights, undated items, reduced motion and all non-Ready source states');
+  const resultId = base.modules[0].assessments[0].result_id;
+  const tableResult = await (await fetch(`${api}/api/results/${resultId}`)).json();
+  const tableDocs = await (await fetch(`${api}/api/results/${resultId}/documents`)).json();
+  const tableDoc = tableDocs[0];
+  const tableTrace = await (await fetch(`${api}/api/documents/${tableDoc.id}/trace`)).json();
+  const row = tableTrace.elements[0]; const headerText = 'Assessment | Weight | Due';
+  row.context = `table row; header: ${headerText}`;
+  row.regions = [{page:1,bbox:[0,0,1,1],coordinate_origin:'TOPLEFT'}];
+  const header = {...row,id:crypto.randomUUID(),text:headerText};
+  tableTrace.elements = [header,row];
+  const tableAssessment = tableResult.assessments[0];
+  tableAssessment.evidence.weight_percent = [row.id]; tableAssessment.evidence.weight_scope = [header.id];
+  await page.route(`**/api/results/${resultId}`, route => route.fulfill({json:tableResult}));
+  await page.route(`**/api/documents/${tableDoc.id}/trace`, route => route.fulfill({json:tableTrace}));
+  await page.goto(`${frontend}/documents?project=${base.id}&assessment=${tableAssessment.id}&field=weight_percent`);
+  await page.locator('#source-text p').first().filter({hasText:'Final exam'}).waitFor();
+  await page.locator('.highlight').waitFor();
+  assert.equal(await page.locator('#source-links button').count(),1,'one source/page control despite multiple evidence elements');
+  assert.equal(await page.locator('.highlight').count(),1,'identical table rectangles are not layered');
+  assert.equal(await page.locator('.highlight.context-highlight').count(),1);
+  assert.equal(await page.locator('.highlight').evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)');
+  assert.equal(await page.locator('#source-precision').isVisible(),true);
+  assert.match(await page.locator('#source-precision').innerText(),/not the exact field location/);
+  assert.equal(new URL(page.url()).searchParams.get('field'),'weight_percent');
+  row.regions = [{page:1,bbox:[.02,.7,.98,.9],coordinate_origin:'TOPLEFT',granularity:'row'}];
+  header.regions = [{page:1,bbox:[.02,.05,.98,.2],coordinate_origin:'TOPLEFT',granularity:'row'}];
+  await page.reload();
+  await page.locator('#source-text p').first().filter({hasText:'Final exam'}).waitFor();
+  await page.locator('.highlight:not(.context-highlight)').waitFor();
+  assert.equal(await page.locator('#source-precision').isVisible(),false);
+  assert.equal(await page.locator('#source-links button').count(),1);
+  assert.equal(await page.locator('.fact.selected').getAttribute('data-field'),'weight_percent');
+  assert.equal(await page.locator('.highlight:not(.context-highlight)').evaluate(e=>e.style.top),'70%');
+  await page.unroute(`**/api/results/${resultId}`); await page.unroute(`**/api/documents/${tableDoc.id}/trace`);
+  passed++; console.log('PASS source precision, no blanket table fill, deduplicated page controls and selected-fact reload');
+  await mode('table');
+  const beforeCells = await counts();
+  await fill('Cell evidence browser regression'); await build(); await ready();
+  await page.getByRole('button',{name:'Week 12, 1 assessments',exact:true}).click();
+  await openSource();
+  const fieldCases = [
+    ['name', 'Final exam', '2%', '38%', '40%'],
+    ['week', 'Week 12', '80%', '18%', '45%'],
+    ['weight_percent', '60%', '45%', '20%', '45%'],
+  ];
+  for (const [field, quote, left, width, top] of fieldCases) {
+    await page.locator(`[data-field="${field}"]`).click();
+    await page.locator('#source-text p').first().filter({hasText:quote}).waitFor();
+    const highlight = page.locator('.highlight:not(.context-highlight)');
+    await highlight.waitFor();
+    assert.equal(await highlight.count(),1);
+    assert.equal(await page.locator('.highlight').count(),1,'supporting context does not add outlines to any field');
+    const geometry = await highlight.evaluate(e=>[e.style.left,e.style.width,e.style.top]);
+    geometry.forEach((actual,i)=>assert.ok(Math.abs(parseFloat(actual)-parseFloat([left,width,top][i]))<0.001));
+  }
+  assert.equal(await page.locator('.highlight.context-highlight').count(),0,'weight has the same overlay rule as name and due');
+  assert.match(await page.locator('[data-evidence-role="supporting"]').innerText(),/Weight \(% of module\).*Supporting context/s);
+  await page.reload();
+  await page.locator('.fact.selected[data-field="weight_percent"]').waitFor();
+  await page.locator('#source-text p').first().filter({hasText:'60%'}).waitFor();
+  assert.equal(await page.locator('#source-links button').count(),1);
+  // An optional header citation on the primary fact must not change its overlay.
+  const cellProject = await (await fetch(`${api}/api/projects/${new URL(page.url()).searchParams.get('project')}`)).json();
+  const cellResultId = cellProject.modules[0].assessments[0].result_id;
+  const cellResult = await (await fetch(`${api}/api/results/${cellResultId}`)).json();
+  const cellDocs = await (await fetch(`${api}/api/results/${cellResultId}/documents`)).json();
+  const cellTrace = await (await fetch(`${api}/api/documents/${cellDocs[0].id}/trace`)).json();
+  const headerIds = cellTrace.elements.filter(e=>e.regions.some(r=>r.role==='column_header')).map(e=>e.id);
+  for (const field of ['name','week','weight_percent']) cellResult.assessments[0].evidence[field].push(...headerIds);
+  await page.route(`**/api/results/${cellResultId}`, route=>route.fulfill({json:cellResult}));
+  await page.reload();
+  await page.locator('.fact.selected[data-field="weight_percent"]').waitFor();
+  for (const [field, quote] of fieldCases) {
+    await page.locator(`[data-field="${field}"]`).click();
+    await page.locator('#source-text p').first().filter({hasText:quote}).waitFor();
+    await page.locator('.highlight').waitFor();
+    assert.equal(await page.locator('.highlight').count(),1,'optional AI header citations have no effect on value outlines');
+    assert.equal(await page.locator('[data-evidence-role="supporting"]').count(),3,'all saved header citations remain inspectable');
+    await page.locator('#source-links button').click();
+    await page.locator('.highlight').waitFor();
+    assert.equal(await page.locator('.highlight').count(),1,'page navigation preserves the value-only overlay rule');
+  }
+  await page.unroute(`**/api/results/${cellResultId}`);
+  const afterCells = await counts();
+  assert.equal(afterCells.docling_calls-beforeCells.docling_calls,1);
+  assert.equal(afterCells.gpt_calls-beforeCells.gpt_calls,1);
+  passed++; console.log('PASS browser-to-storage-to-PostgreSQL-to-worker-to-scheduler cell citations, distinct field rectangles and header context');
+  await mode('selective_failure');
+  const partialProject = await (await fetch(`${api}/api/projects`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:'Partial recovery browser',week_count:14})})).json();
+  const partialForm = new FormData();
+  partialForm.append('modules', JSON.stringify([{module_title:'Good',credit:6,file_fields:['good']},{module_title:'Bad',credit:6,file_fields:['bad']}]));
+  partialForm.append('good',new Blob([bytes],{type:'image/png'}),'good.png');
+  partialForm.append('bad',new Blob([bytes],{type:'image/png'}),'bad.png');
+  const partialCounts = await counts();
+  assert.equal((await fetch(`${api}/api/projects/${partialProject.id}/process`, {method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()},body:partialForm})).status,202);
+  let partial;
+  for (let i=0;i<100;i++) {
+    partial=await (await fetch(`${api}/api/projects/${partialProject.id}`)).json();
+    if (partial.status !== 'Processing') break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(partial.status,'Partial');
+  await page.goto(`${frontend}/?project=${partial.id}`); await ready();
+  await page.getByRole('region',{name:'Schedule coverage'}).waitFor();
+  await page.locator('.recovery-disclosure > summary').click();
+  assert.match(await page.getByRole('region',{name:'Schedule coverage'}).innerText(),/Some deadlines/);
+  assert.equal(await page.locator('.calendar-module').filter({hasText:'Good'}).count(),1);
+  const failedDoc=partial.documents.find(doc=>doc.module_title==='Bad');
+  await page.goto(`${frontend}/documents?project=${partial.id}&document=${failedDoc.document_id}`);
+  await page.locator('#source-text').filter({hasText:'Final exam'}).waitFor();
+  assert.equal(await page.locator('#original').getAttribute('aria-disabled'),null);
+  await page.goto(`${frontend}/?project=${partial.id}`); await ready();
+  await page.locator('.recovery-disclosure > summary').click();
+  await page.screenshot({path:'/tmp/stackplan-partial-recovery.png',fullPage:true});
+  await mode('success');
+  await page.getByRole('button',{name:'Retry document',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('[aria-label="Schedule coverage"]'));
+  const recovered=await (await fetch(`${api}/api/projects/${partial.id}`)).json();
+  assert.equal(recovered.status,'Ready');
+  assert.equal((await counts()).docling_calls-partialCounts.docling_calls,2);
+  assert.equal((await counts()).gpt_calls-partialCounts.gpt_calls,5);
+  passed++; console.log('PASS partial schedule, failed source trace and targeted retry preserve successful work');
+  assert.deepEqual(errors, []); console.log(`BROWSER RESULT: ${passed} passed, 0 failed`);
+} finally { await browser.close(); }

@@ -19,8 +19,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
       - run: python -m compileall -q src tests
-      - run: python -m pytest -q
-      - run: npm run check --prefix frontend
+      - run: python scripts/test.py
       - run: npm run test:loading --prefix frontend
       - run: npm run test:calendar --prefix frontend
       - run: npm run test:intake --prefix frontend
