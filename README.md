@@ -16,6 +16,12 @@ Python · FastAPI · PostgreSQL · Docling
 
 ## Product
 
+### See your trimester at a glance
+
+View deadlines, assessment weights and multi-week projects in one calendar. Filter by module, switch to a list, or open an assessment to inspect its source.
+
+![Stackplan calendar showing assessments from two modules across 14 teaching weeks](assets/screenshots/calendar.png)
+
 ### Click a fact. See its citation.
 
 Open an assessment, then select its **name**, **due week** or **weight** to inspect the evidence behind that detail. Stackplan shows the quoted source text, document name and page number alongside the original document. Image sources highlight the matching region when precise coordinates are available.
@@ -23,12 +29,6 @@ Open an assessment, then select its **name**, **due week** or **weight** to insp
 ![Stackplan citation view showing the selected 30% assessment weight, its highlighted table cell in the original brief, and the quoted citation with filename and page number](assets/screenshots/citations.png)
 
 *Example: selecting **Weight · 30% of module** highlights the **30%** cell in the sample brief. The citation includes **Page 1** and the supporting **Module weight** header.*
-
-### See your trimester at a glance
-
-View deadlines, assessment weights and multi-week projects in one calendar. Filter by module, switch to a list, or open an assessment to inspect its source.
-
-![Stackplan calendar showing assessments from two modules across 14 teaching weeks](assets/screenshots/calendar.png)
 
 ### From documents to deadlines
 
