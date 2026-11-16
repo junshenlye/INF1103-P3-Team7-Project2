@@ -366,6 +366,7 @@ The runner creates a uniquely named PostgreSQL container and temporary document 
 
 To retain the synthetic state-transition trace, set `STACKPLAN_TEST_ARTIFACT_DIR=test-results` before running the suite. The trace records actual API/SQL snapshots for `Created → Processing → Partial → Processing → Ready`, including a targeted generation-2 retry with parse reuse. Test artifacts are ignored by Git.
 
+Latest local verification (15 November 2026): **166 Python tests, 8 frontend tests, 10 browser scenarios and 7 Docker startup checks passed**. The standalone Docker test image passed 165 tests; its one host-assisted restore check passed in the full host run.
 
 GitHub Actions checks README's UML against source and runs the isolated suite on pushes and pull requests. Without a configured disposable test database, direct pytest runs skip database tests; use the documented runner for complete verification.
 

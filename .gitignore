@@ -1,28 +1,18 @@
-# Local secrets and environment
+.DS_Store
 .env
+.pytest_cache/
 .venv/
-
-# Python bytecode and tool caches
+node_modules/
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.ruff_cache/
-
-# Coverage and generated test output
 .coverage
 htmlcov/
 stackplan-result.json
 test-results/
-
-# Frontend dependencies
-node_modules/
-
-# Operating system files
-.DS_Store
-
-# Local database files
 database/data/
 
-# Additional local artifacts
+.ruff_cache/
+
+# Local working notes and report exports; submission documentation is in README.
 /docs/
 /tests/README.md
