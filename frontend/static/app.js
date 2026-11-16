@@ -267,7 +267,7 @@ function selectProject(project) {
   }
   state.project = project; state.schedule = project.schedule;
   if (project.documents) state.progress = { documents: project.documents, total_documents: project.documents.length, extracted_documents: project.documents.filter(d => d.state === 'extracted').length };
-  state.step = project.status === 'Created' ? 'upload' : project.schedule ? 'schedule' : ['Failed', 'Interrupted', 'Partial', 'Ready'].includes(project.status) ? 'failure' : 'processing';
+  state.step = project.status === 'Created' ? 'upload' : project.status === 'Processing' ? 'processing' : project.schedule ? 'schedule' : ['Failed', 'Interrupted', 'Partial', 'Ready'].includes(project.status) ? 'failure' : 'processing';
   if (project.status !== 'Created') resetInput();
 }
 async function waitForVisiblePage() {
@@ -290,12 +290,6 @@ async function waitForJob(jobId, token) {
       const progressChanged = JSON.stringify(state.progress) !== JSON.stringify(job.progress || null);
       state.progress = job.progress || null;
       if (!['queued', 'running'].includes(job.status)) return job;
-      if (state.schedule || progressChanged && state.progress?.extracted_documents) {
-        const snapshot = await request(`/api/projects/${state.project.id}`); assertCurrent(token);
-        if (snapshot.schedule && (state.busy || JSON.stringify(snapshot) !== JSON.stringify(state.project))) {
-          selectProject(snapshot); state.busy = null; render();
-        }
-      }
       const detail = processingFeedback(job.stage, state.progress?.documents || []);
       if (state.busy && (state.busy.detail !== detail || state.busy.stage !== job.stage || progressChanged)) {
         state.busy.detail = detail; state.busy.stage = job.stage; showBusy();
@@ -317,10 +311,10 @@ async function refreshProject(id) {
   if (wasProcessing && project.status === 'Ready') await confirmCompletion(token);
   selectProject(project);
   if (state.project.status === 'Processing') {
-    state.busy = state.schedule ? null : { label: 'Processing your documents…', detail: 'Your submission is saved. Checking processing status…' };
+    state.busy = { label: 'Processing your documents…', detail: 'Your submission is saved. Checking processing status…' };
     render(); await waitForJob(state.project.job_id, token);
     const terminal = await request(`/api/projects/${id}`); assertCurrent(token);
-    if (terminal.status === 'Ready' && !state.schedule) await confirmCompletion(token);
+    if (terminal.status === 'Ready') await confirmCompletion(token);
     selectProject(terminal);
   } else if (['Failed', 'Interrupted'].includes(project.status) && project.job_id) {
     const job = await request(`/api/jobs/${project.job_id}`); assertCurrent(token); state.progress = job.progress || null;
