@@ -2,9 +2,9 @@
 
 # Stackplan
 
-**Your module briefs. One assessment calendar.**
+**Your assessment calendar. The citations behind it.**
 
-Turn PDFs and images into a weekly schedule, with source evidence behind every assessment.
+Turn PDFs and images into a weekly schedule, then trace assessment details back to their cited sources.
 
 [Product](#product) | [Setup](#setup) | [Documentation](#documentation)
 
@@ -15,6 +15,14 @@ Python · FastAPI · PostgreSQL · Docling
 ---
 
 ## Product
+
+### Click a fact. See its citation.
+
+Open an assessment, then select its **name**, **due week** or **weight** to inspect the evidence behind that detail. Stackplan shows the quoted source text, document name and page number alongside the original document. Image sources highlight the matching region when precise coordinates are available.
+
+![Stackplan citation view showing the selected 30% assessment weight, its highlighted table cell in the original brief, and the quoted citation with filename and page number](assets/screenshots/citations.png)
+
+*Example: selecting **Weight · 30% of module** highlights the **30%** cell in the sample brief. The citation includes **Page 1** and the supporting **Module weight** header.*
 
 ### See your trimester at a glance
 
@@ -31,7 +39,7 @@ View deadlines, assessment weights and multi-week projects in one calendar. Filt
 
 *Screenshots show the current interface with sample data. Click an image to view it at full size.*
 
-- **Trace the details.** Inspect original documents, extracted text and source highlights where available.
+- **Verify each cited detail.** Switch between assessment name, due week and weight to inspect the evidence for that field.
 - **Keep useful results.** Retry failed documents or upload clearer replacements without losing successful work.
 - **See what is unknown.** Missing dates and weights remain visible instead of being guessed.
 
@@ -105,7 +113,7 @@ Technical details and development commands are grouped below. Expand the section
 1. Name a trimester and add modules with their source documents to the browser's submission bucket.
 2. Review the documents, then build the assessment schedule.
 3. Follow processing progress. The schedule opens once all documents finish processing and final validation completes. If some documents fail, successful results remain available with recovery options for the failed sources.
-4. Select an assessment to inspect its cited source text and original. Highlights are shown when valid page coordinates are available.
+4. Select an assessment, then choose its name, due week or weight to inspect the field's cited source text, filename, page number and original document. Image previews highlight the matching region when precise coordinates are available; native PDF previews open the cited page alongside the saved source text.
 5. For unresolved documents, retry the failed work or supply a clearer replacement.
 
 Project status follows `Created → Processing → Ready | Partial | Failed | Interrupted`. Execution status, understanding, coverage and stale results are tracked separately. Retries reuse saved parses and accepted chunks. Replacements receive a new document identity; original evidence and older results remain available.
