@@ -45,6 +45,8 @@ def main():
         env["STACKPLAN_TEST_CONTAINER"] = name
         run(sys.executable, "-m", "pytest", "-q", env=env)
         run("npm", "run", "check", "--prefix", "frontend", env=env)
+        run("npm", "run", "test:loading", "--prefix", "frontend", env=env)
+        run("npm", "run", "test:recovery", "--prefix", "frontend", env=env)
         api_port = available_port()
         env["STACKPLAN_BROWSER_API_PORT"] = str(api_port)
         env["BROWSER_API_URL"] = f"http://127.0.0.1:{api_port}"
