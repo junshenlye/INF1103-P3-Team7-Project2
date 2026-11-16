@@ -1,47 +1,119 @@
+<div align="center">
+
 # Stackplan
 
-Stackplan turns module briefs, PDFs and images into an assessment calendar with traceable source evidence. AI extracts the facts; deterministic rules validate assessment relationships, weights and timing before publication. Unknown facts remain unknown, and a failed document does not discard successful results.
+**Your module briefs. One assessment calendar.**
 
-Built for INF1103 Project Part 2 using Python, FastAPI, PostgreSQL, Docling and a browser interface.
+Turn PDFs and images into a weekly schedule, with source evidence behind every assessment.
 
-## Features
+[Product](#product) | [Setup](#setup) | [Documentation](#documentation)
 
-- Submit several modules and their PDF, PNG or JPEG documents together.
-- View assessments by week, including ranges and assessments with unknown timing.
-- Inspect the original document, extracted text and supporting source highlights.
-- Retry a failed document or replace an original while retaining successful work and historical evidence.
-- Apply evidence-backed corrections through the review API, with append-only revisions and correction lineage.
-- Resume interrupted work using durable checkpoints, fenced worker claims and idempotent requests.
+Python · FastAPI · PostgreSQL · Docling
 
-## Run with Docker
+</div>
 
-Install Docker with Compose. Copy `.env.example` to `.env` if you do not already have a configuration file, then set:
+---
+
+## Product
+
+### See your trimester at a glance
+
+View deadlines, assessment weights and multi-week projects in one calendar. Filter by module, switch to a list, or open an assessment to inspect its source.
+
+![Stackplan calendar showing assessments from two modules across 14 teaching weeks](assets/screenshots/calendar.png)
+
+### From documents to deadlines
+
+| 1. Add your modules | 2. Review and build |
+| --- | --- |
+| ![Upload workspace with module details and a document drop zone](assets/screenshots/upload.png) | ![Review screen showing two modules and their assessment briefs before submission](assets/screenshots/review.png) |
+| Name your trimester and add each module's PDF, PNG or JPG files. | Check your documents, then select **Build assessment schedule**. |
+
+*Screenshots show the current interface with sample data. Click an image to view it at full size.*
+
+- **Trace the details.** Inspect original documents, extracted text and source highlights where available.
+- **Keep useful results.** Retry failed documents or upload clearer replacements without losing successful work.
+- **See what is unknown.** Missing dates and weights remain visible instead of being guessed.
+
+Built for **INF1103 Project Part 2**.
+
+## Setup
+
+### 1. Get the project
+
+Install **Git** and **Docker Desktop**, then open Docker Desktop and leave it running. Docker runs the app and its services; you do not need to install Python or Node.js for this setup.
+
+If you already have this repository, open a terminal in its folder and skip the `git clone` and `cd` commands.
+
+**macOS — Terminal**
+
+```sh
+git clone https://github.com/junshenlye/INF1103-P3-Team7-Project2.git
+cd INF1103-P3-Team7-Project2
+[ -f .env ] || cp .env.example .env
+open -e .env
+```
+
+**Windows — PowerShell**
+
+```powershell
+git clone https://github.com/junshenlye/INF1103-P3-Team7-Project2.git
+cd INF1103-P3-Team7-Project2
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+```
+
+### 2. Add your API settings
+
+In `.env`, fill in these two values, then save the file:
 
 ```dotenv
 OPENAI_API_KEY=your-api-key
 OPENAI_MODEL=your-model
 ```
 
-The configured model must support the strict JSON Schema response format used by the extraction request. `GPT_API_KEY` and `GPT_MODEL` can override the corresponding OpenAI settings. Keep credentials in the ignored `.env` file.
+Use a model that supports **strict JSON Schema structured outputs**. These settings are required to process documents. Keep your key in `.env`, which is excluded from Git.
 
-From the repository root:
+### 3. Start Stackplan
+
+Run from the project folder. The command is the same on **Mac and Windows**:
 
 ```sh
 docker compose up --build --detach
 ```
 
-Open **http://127.0.0.1:5173**. Compose starts PostgreSQL, applies migrations, starts the web application and worker, and starts Docling. Docling's first startup can take several minutes.
+Open **[Stackplan → http://127.0.0.1:5173](http://127.0.0.1:5173)**.
 
-The launchers `scripts/start.sh` and `scripts/start.ps1` run the same Docker command. To use an existing Docling service, set `DOCLING_URL` and start `docker compose up --build --detach app worker`.
+The first launch downloads the services and prepares the database. Docling, the document reader, can take several minutes to start.
 
-```sh
-# Stop the application; named data volumes are retained.
-docker compose down
-```
+| Task | Command (Mac & Windows) |
+| --- | --- |
+| Check service status | `docker compose ps` |
+| View recent logs | `docker compose logs --tail=100 app worker docling` |
+| Stop the app and keep saved data | `docker compose down` |
+| Start again or rebuild after code changes | `docker compose up --build --detach` |
 
-Rebuild after changing source files. Both the app and worker use the same database and original-document volume.
+If the page does not open, check that Docker Desktop is running and inspect the service status above. If document processing fails, check your API settings and worker logs. To use another port, set `FRONTEND_PORT` in `.env`, rerun the start command, and open that port instead.
 
-### Configuration
+## Documentation
+
+Technical details and development commands are grouped below. Expand the section you need.
+
+<details>
+<summary><strong>Using the application</strong></summary>
+
+1. Name a trimester and add modules with their source documents to the browser's submission bucket.
+2. Review the documents, then build the assessment schedule.
+3. Follow processing progress. The schedule opens once all documents finish processing and final validation completes. If some documents fail, successful results remain available with recovery options for the failed sources.
+4. Select an assessment to inspect its cited source text and original. Highlights are shown when valid page coordinates are available.
+5. For unresolved documents, retry the failed work or supply a clearer replacement.
+
+Project status follows `Created → Processing → Ready | Partial | Failed | Interrupted`. Execution status, understanding, coverage and stale results are tracked separately. Retries reuse saved parses and accepted chunks. Replacements receive a new document identity; original evidence and older results remain available.
+
+</details>
+
+<details>
+<summary><strong>Configuration</strong></summary>
 
 | Variable | Purpose / default |
 | --- | --- |
@@ -56,17 +128,12 @@ Rebuild after changing source files. Both the app and worker use the same databa
 
 The app exposes authoritative upload/form bounds at `GET /api/limits`. Defaults are 50 MiB per request, 10 MiB per document, 20 modules and 10 documents per module.
 
-## Use the application
+`GPT_API_KEY` and `GPT_MODEL` override the corresponding OpenAI settings when set. The launchers `scripts/start.sh` and `scripts/start.ps1` run the same Docker start command. To use an existing Docling service, set `DOCLING_URL` and run `docker compose up --build --detach app worker`. Both the app and worker share the database and original-document volume.
 
-1. Name a trimester and add modules with their source documents to the browser's submission bucket.
-2. Review the documents, then build the assessment schedule.
-3. Follow processing progress. The schedule opens once all documents finish processing and final validation completes. If some documents fail, successful results remain available with recovery options for the failed sources.
-4. Select an assessment to inspect its cited source text and original. Highlights are shown when valid page coordinates are available.
-5. For unresolved documents, retry the failed work or supply a clearer replacement.
+</details>
 
-Project status follows `Created → Processing → Ready | Partial | Failed | Interrupted`. Execution status, understanding, coverage and stale results are tracked separately. Retries reuse saved parses and accepted chunks. Replacements receive a new document identity; original evidence and older results remain available.
-
-## Architecture
+<details>
+<summary><strong>Architecture, UML and OOP principles</strong></summary>
 
 The application has **17 classes**: four managers, nine domain classes and four supporting classes. Only managers coordinate application objects. Entities operate on their own state and never call another entity or a manager.
 
@@ -311,7 +378,10 @@ Temporary submission, staging, checkpoint and response values are dictionaries o
 - **OCP:** a new valid assessment subtype can answer the shared query without changing the scheduling loop; factory/input registration may still change.
 - **LSP:** both assessment subtypes obey the same span/undated/excluded contract without changing saved facts or requiring different client preconditions.
 
-## API and persistence
+</details>
+
+<details>
+<summary><strong>API and persistence</strong></summary>
 
 The same app serves the browser and API. Endpoint schemas are available at `/openapi.json`.
 
@@ -332,7 +402,10 @@ PostgreSQL stores immutable parses, accepted chunks, assessment results, reviews
 
 A retry increments its document generation once per request key. Lease recovery obtains a new worker token; stale workers cannot write. Successful siblings remain published. Review/publication conflicts re-read current versions, while replaced evidence can mark a reviewed result stale rather than silently overwrite it. Project responses use one consistent snapshot and event cursor.
 
-## Testing
+</details>
+
+<details>
+<summary><strong>Testing and development</strong></summary>
 
 Tests use deterministic Docling/GPT responses and do not require paid API access.
 
@@ -349,6 +422,8 @@ This uses a separate disposable test database. The host-assisted backup/restore 
 
 Requires Docker, Python 3.9+, Node.js 20+ and Playwright Chromium. Docker and CI use Python 3.12.
 
+**macOS — Terminal**
+
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
@@ -360,7 +435,20 @@ cd ..
 .venv/bin/python scripts/test.py
 ```
 
-On Windows, use `.venv\Scripts\python.exe` instead of `.venv/bin/python`. `BROWSER_EXECUTABLE` can select an installed Chrome browser; `PLAYWRIGHT_MODULE` can select an existing Playwright module.
+**Windows — PowerShell**
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+npm ci --prefix frontend
+cd frontend
+npx playwright install chromium
+cd ..
+.\.venv\Scripts\python.exe scripts/check_uml.py
+.\.venv\Scripts\python.exe scripts/test.py
+```
+
+`BROWSER_EXECUTABLE` can select an installed Chrome browser; `PLAYWRIGHT_MODULE` can select an existing Playwright module.
 
 The runner creates a uniquely named PostgreSQL container and temporary document storage, runs Python/JavaScript/browser checks, then cleans up its own services. It covers schema validation, content/size limits, ownership, schedules, partial publication, retries/replacements, cancellation, stale leases, concurrent reviews, consistent snapshots, original-file recovery and backup/restore.
 
@@ -370,6 +458,15 @@ Latest local verification (15 November 2026): **166 Python tests, 8 frontend tes
 
 GitHub Actions checks README's UML against source and runs the isolated suite on pushes and pull requests. Without a configured disposable test database, direct pytest runs skip database tests; use the documented runner for complete verification.
 
-## Operational notes
+</details>
+
+<details>
+<summary><strong>Operational notes</strong></summary>
 
 Closing the browser does not stop an accepted job. Unexpected worker death requeues unfinished work with a fresh fenced lease, up to three recoveries. Provider retries are bounded: invalid extraction receives one corrective retry; transient service failures receive up to three calls. Missing originals retain saved facts/evidence with a scoped warning. The application is intended for local single-user use, and live extraction accuracy depends on the supplied documents and configured providers.
+
+</details>
+
+---
+
+INF1103 · Team 7 · [MIT License](LICENSE)
