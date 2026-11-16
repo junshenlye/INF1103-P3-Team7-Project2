@@ -17,10 +17,10 @@ try {
   browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  let status = 'Partial', revision = 1, generation = 1, retryPosts = 0, replacementPosts = 0, failPoll = false, loseReplacement = false;
+  let status = 'Processing', queued = true, revision = 1, generation = 1, retryPosts = 0, replacementPosts = 0, failPoll = false, loseReplacement = false;
   const docs = () => [
     {document_id:'good',module_id:'m1',module_title:'HSC1007',filename:'HSC1007.jpeg',state:'extracted',execution:'succeeded',inference:'understood',generation:1,retryable:false,issues:[]},
-    {document_id:'bad',module_id:'m2',module_title:'HTM2211',filename:'HTM2211.jpg',state:status==='Processing'?'extracting':status==='Ready'?'extracted':'failed',execution:status==='Processing'?'running':status==='Ready'?'succeeded':'failed',inference:status==='Ready'?'understood':'unknown',generation,retryable:status==='Partial',issues:[]}
+    {document_id:'bad',module_id:'m2',module_title:'HTM2211',filename:'HTM2211.jpg',state:status==='Processing'?(queued?'waiting':'extracting'):status==='Ready'?'extracted':'failed',execution:status==='Processing'?(queued?'queued':'running'):status==='Ready'?'succeeded':'failed',inference:status==='Ready'?'understood':'unknown',generation,retryable:status==='Partial',issues:[]}
   ];
   const project = () => ({id:'recovery',name:'Recovery test',week_count:14,status,job_id:'job',coverage:status==='Ready'?'complete':'partial',schedule_revision_id:revision,stale:replacementPosts>0 && status!=='Ready',documents:docs(),modules:[{id:'m1',module_title:'HSC1007'},{id:'m2',module_title:'HTM2211'}],issues:[],schedule:{weeks:[{week:1,items:[{assessment_id:'a1',module_id:'m1',module_title:'HSC1007',name:'Saved assessment',week:1,weight_percent:30,weight_scope:'module'}]}],unscheduled:[]}});
   await page.route('**/api/**',async route=>{
@@ -48,6 +48,21 @@ try {
   await page.goto(base);
   await page.getByRole('heading',{name:'Your assessment schedule',exact:true}).waitFor();
   await page.locator('.recovery-disclosure > summary').click();
+  await page.getByRole('heading',{name:'Your documents are still processing',exact:true}).waitFor();
+  const pending = page.locator('[data-document-id="bad"]');
+  assert.equal(await pending.locator('.recovery-status').innerText(),'Queued');
+  assert.equal(await pending.locator('.needs-attention, input, button').count(),0,'Waiting sources have no failure styling or recovery controls');
+  assert.equal(await page.locator('.coverage-symbol').count(),0,'No warning symbol while sources are pending');
+  assert.equal(await page.getByText('Some deadlines or assessment details may be missing',{exact:true}).count(),0);
+  assert.equal(await page.locator('.coverage-count').innerText(),'1 of 2 processed');
+  await page.screenshot({path:'/tmp/stackplan-pending-document-progress.png',fullPage:true});
+  queued=false;
+  await pending.locator('.recovery-status').filter({hasText:'Processing'}).waitFor();
+  assert.equal(await pending.locator('.needs-attention, input, button').count(),0,'Running sources have no failure styling or recovery controls');
+  assert.equal(await page.getByRole('heading',{name:'Your assessment schedule',exact:true}).isVisible(),true);
+  status='Partial';
+  await page.getByRole('heading',{name:'Some deadlines or assessment details may be missing',exact:true}).waitFor();
+  assert.equal(await pending.locator('.recovery-status').innerText(),'Needs attention','A settled failure still offers recovery');
   assert.equal(await page.getByRole('button',{name:'Retry document',exact:true}).count(),1);
   assert.equal(await page.locator('[data-document-id="good"] input').count(),0,'Successful documents need no replacement control');
   await page.getByRole('button',{name:'Retry document',exact:true}).click();

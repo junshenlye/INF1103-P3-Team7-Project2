@@ -188,6 +188,9 @@ footer { display: flex; justify-content: space-between; width: var(--page); marg
 .coverage-count { padding:5px 9px; border:1px solid #736448; border-radius:20px; color:#e6c48a; font-size:11px; white-space:nowrap; }
 .recovery-disclosure { border-top:1px solid #6c604266; }
 .recovery-disclosure > summary { padding:14px 24px; color:#e6c48a; font-size:12px; cursor:pointer; }
+.processing-notice { border-color:#455b50; background:#1d2a23; }
+.processing-notice .issue-kicker, .processing-notice .coverage-count, .processing-notice .recovery-disclosure > summary { color:var(--accent); }
+.processing-notice .coverage-count, .processing-notice .recovery-disclosure { border-color:#455b50; }
 .recovery-disclosure .document-progress { margin:0; padding:0 24px 20px; border:0; }
 .recovery-documents h3 { margin:8px 0 14px; font-size:14px; }
 .recovery-documents .document-progress-list { max-height:none; overflow:visible; display:grid; gap:12px; }
