@@ -184,8 +184,11 @@ class LogicManager:
             if not valid:
                 violations.append(f"{field}: {rule}")
         key, name = record.get('key'), record.get('name')
-        require(isinstance(key, str) and 1 <= len(key) <= limits.ASSESSMENT_KEY_LENGTH, 'key', 'use a nonempty bounded identity')
-        require(isinstance(name, str) and 1 <= len(name.strip()) <= limits.ASSESSMENT_NAME_LENGTH, 'name', 'use a nonempty bounded name')
+        require(isinstance(key, str) and 1 <= len(key) <= limits.ASSESSMENT_KEY_LENGTH, 'key', f'use an identity of 1–{limits.ASSESSMENT_KEY_LENGTH} characters')
+        name_length = len(name.strip()) if isinstance(name, str) else None
+        require(name_length is not None and 1 <= name_length <= limits.ASSESSMENT_NAME_LENGTH, 'name',
+                f'use a source-supported short label of 1–{limits.ASSESSMENT_NAME_LENGTH} characters'
+                + (f' (received {name_length}); omit task instructions and descriptions' if name_length is not None else ''))
         require(record.get('kind') in ('assessment', 'group'), 'kind', 'use assessment or group')
         require(record.get('weight_scope') in ('module', 'group', 'unknown'), 'weight_scope', 'use module, group or unknown')
         weight = record.get('weight_percent')

@@ -17,7 +17,7 @@ try {
   browser = await chromium.launch({ headless: true, ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  let stage = 'queued', terminal = '', failPoll = false, polls = 0;
+  let stage = 'queued', terminal = '', failPoll = false, earlySchedule = false, polls = 0;
   const documents = [
     { document_id: 'doc-1', module_id: 'inf1103', module_title: 'INF1103', filename: 'Assessment-brief.pdf', state: 'waiting' },
     { document_id: 'doc-2', module_id: 'inf1104', module_title: 'INF1104', filename: 'Assessment-brief.pdf', state: 'waiting' },
@@ -32,7 +32,7 @@ try {
       if (failPoll) return route.fulfill({ status: 503, json: { issues: [{ message: 'Status temporarily unavailable.' }] } });
       return route.fulfill({ json: { id: 'job-test', status: terminal ? terminal : stage === 'queued' ? 'queued' : 'running', stage, progress: progress() } });
     }
-    return route.fulfill({ json: path === '/api/limits' ? { module_count: 20, documents_per_module: 10, document_bytes: 10485760, request_bytes: 20971520, project_name_length: 150, module_title_length: 200, credit: 100, week_count: 52, media_types: ['application/pdf', 'image/png', 'image/jpeg'] } : path === '/api/projects' ? [project] : { ...project, status: terminal || project.status, schedule: terminal === 'Ready' ? { weeks: [], unscheduled: [] } : null } });
+    return route.fulfill({ json: path === '/api/limits' ? { module_count: 20, documents_per_module: 10, document_bytes: 10485760, request_bytes: 20971520, project_name_length: 150, module_title_length: 200, credit: 100, week_count: 52, media_types: ['application/pdf', 'image/png', 'image/jpeg'] } : path === '/api/projects' ? [project] : { ...project, status: terminal || project.status, documents, coverage: terminal === 'Ready' ? 'complete' : 'partial', schedule: earlySchedule || terminal === 'Ready' ? { weeks: [], unscheduled: [] } : null } });
   });
   const base = `http://127.0.0.1:${server.address().port}/?project=loading-test`;
   const current = () => page.getByRole('heading', { name: /Building your schedule|Finishing up/ }).waitFor();
@@ -50,12 +50,15 @@ try {
   await page.locator('.processing-detail').filter({ hasText: 'Waiting to start' }).waitFor();
   stage = 'parsing'; documents[0].state = 'parsing';
   await page.locator('.processing-detail').filter({ hasText: 'Reading documents · 0/2 processed' }).waitFor();
+  earlySchedule = true;
   stage = 'extracting'; documents[0].state = 'extracted'; documents[1].state = 'extracting';
   await page.locator('.processing-detail').filter({ hasText: 'Extracting assessments · 1/2 processed' }).waitFor();
+  assert.equal(await page.locator('.schedule-workspace, .coverage-notice').count(), 0, 'An early published result stays behind the loading screen');
   const firstCell = page.locator('.paper-front');
   assert.equal(await firstCell.evaluate(el => getComputedStyle(el).animationName), 'paper-float');
   assert.equal(await page.evaluate(() => window.loadingAnimation === document.querySelector('.loading-documents')), true, 'Animation survives status updates');
   await page.reload(); await current();
+  assert.equal(await page.locator('.schedule-workspace, .coverage-notice').count(), 0, 'Reloading a processing project cannot expose an incomplete schedule');
   await page.waitForFunction(() => document.querySelectorAll('.checkpoint-list .is-done').length === 1);
   await page.waitForFunction(() => parseFloat(getComputedStyle(document.querySelector('.checkpoint-list .is-done path')).strokeDashoffset) === 0);
   await page.screenshot({ path: '/tmp/stackplan-document-progress-desktop.png', fullPage: true });
@@ -85,8 +88,16 @@ try {
   await page.getByRole('heading', { name: 'Your assessment schedule', exact: true }).waitFor();
   await page.waitForFunction(() => !document.querySelector('[data-busy]'));
   assert.equal(await page.locator('#new-project').isDisabled(), false);
+  // A completed run can retain good results even when another document fails.
+  terminal = ''; stage = 'extracting'; documents[1].state = 'extracting';
+  await page.goto(base); await current();
+  documents[1].state = 'failed'; terminal = 'Partial';
+  await page.getByRole('heading', { name: 'Your assessment schedule', exact: true }).waitFor();
+  assert.equal(await page.locator('[data-busy]').count(), 0);
+  assert.equal(await page.locator('[data-document-state=failed]').count(), 1);
+  assert.equal(await page.locator('.terminal-failure').count(), 0, 'Partial success still opens saved results after processing settles');
   // A fast job can skip every intermediate polling checkpoint.
-  terminal = ''; stage = 'queued'; documents.forEach(doc => { doc.state = 'waiting'; });
+  terminal = ''; earlySchedule = false; stage = 'queued'; documents.forEach(doc => { doc.state = 'waiting'; });
   await page.goto(base); await current();
   terminal = 'Ready';
   await page.getByRole('heading', { name: 'Your schedule is ready.', exact: true }).waitFor();

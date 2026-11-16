@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.main import create_app
+from src.config import limits
 from src.managers.ai_manager import AIManager
 from src.managers.logic_manager import LogicManager
 from src.errors.processing_error import ProcessingError
@@ -95,6 +96,63 @@ def test_corrective_retry_keeps_rule_diagnostics_and_publishes_once(data, settin
         attempt = conn.execute('SELECT * FROM extraction_attempts').fetchone()
         assert attempt['rejected']['assessments'][0]['week'] == 99
         assert conn.execute('SELECT count(*) AS n FROM assessments').fetchone()['n'] == 1
+
+
+@pytest.mark.parametrize('corrects_name', [True, False])
+def test_two_documents_with_long_assignment_descriptions(data, settings, corrects_name):
+    client, pid, _ = submission(data, settings, ('ICT2212', 'OTY1103'))
+    calls = {'ICT2212': 0, 'OTY1103': 0, 'ocr': 0}
+    names = ['Assignment 1: ' + 'x' * 206, 'Assignment 2: ' + 'y' * 276]
+
+    def doc(_):
+        calls['ocr'] += 1
+        return httpx.Response(200, json=parsed(' '.join(names)))
+
+    def gpt(request):
+        module = title(request)
+        calls[module] += 1
+        response = extraction(request)
+        if module == 'ICT2212':
+            return response
+        payload = json.loads(request.content)
+        prompt = payload['messages'][0]['content']
+        assert f'1–{limits.ASSESSMENT_NAME_LENGTH} characters' in prompt
+        schema = payload['response_format']['json_schema']['schema']
+        assert 'short' in schema['properties']['assessments']['items']['properties']['name']['description'].lower()
+        corrective = 'Previous output failed validation:' in prompt
+        if corrective:
+            assert 'name:' in prompt and 'received 220' in prompt
+            assert 'omit task instructions and descriptions' in prompt
+        wire = json.loads(response.content)
+        raw = json.loads(wire['choices'][0]['message']['content'])
+        template = raw['assessments'][0]
+        raw['assessments'] = [
+            {**template, 'key': f'assignment-{index}', 'weight_percent': 30,
+             'name': f'Assignment {index}' if corrective and corrects_name else name}
+            for index, name in enumerate(names, 1)
+        ]
+        wire['choices'][0]['message']['content'] = json.dumps(raw)
+        return httpx.Response(200, json=wire)
+
+    asyncio.run(execute(data, settings, gpt, doc))
+    project = client.get(f'/api/projects/{pid}').json()
+    assert calls == {'ICT2212': 1, 'OTY1103': 2, 'ocr': 2}
+    assert project['status'] == ('Ready' if corrects_name else 'Partial')
+    by_module = {d['module_title']: d for d in project['documents']}
+    assert by_module['ICT2212']['execution'] == 'succeeded'
+    assert by_module['OTY1103']['retryable'] is (not corrects_name)
+    items = project['schedule']['weeks'][11]['items']
+    assert len(items) == (3 if corrects_name else 1)
+    if corrects_name:
+        assert not project['issues']
+        assert {item['name'] for item in items} == {'Final exam', 'Assignment 1', 'Assignment 2'}
+        source = client.get(by_module['OTY1103']['trace_url']).json()
+        assert all(name in ' '.join(e['text'] for e in source['elements']) for name in names)
+        assert all(item['evidence']['name'] for item in items)
+    with data.pool.connection() as conn:
+        attempts = conn.execute('SELECT message FROM extraction_attempts ORDER BY id').fetchall()
+        assert len(attempts) == (1 if corrects_name else 2)
+        assert all('1–200 characters' in a['message'] for a in attempts)
 
 
 def test_concurrent_gpt_and_global_provider_limits(data, settings):

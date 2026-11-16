@@ -386,9 +386,14 @@ try {
   await page.goto(`${frontend}/?project=${partial.id}`); await ready();
   await page.locator('.recovery-disclosure > summary').click();
   await page.screenshot({path:'/tmp/stackplan-partial-recovery.png',fullPage:true});
-  await mode('success');
+  await mode('hold');
   await page.getByRole('button',{name:'Retry document',exact:true}).click();
-  await page.waitForFunction(()=>!document.querySelector('[aria-label="Schedule coverage"]'));
+  await page.getByRole('heading',{name:'Building your schedule…',exact:true}).waitFor();
+  assert.equal(await page.locator('.schedule-workspace, .coverage-notice').count(),0,'Retry keeps saved results hidden until processing settles');
+  assert.equal((await (await fetch(`${api}/api/projects/${partial.id}`)).json()).status,'Processing');
+  await mode('success');
+  await ready();
+  await page.waitForFunction(()=>!document.querySelector('[data-busy]'));
   const recovered=await (await fetch(`${api}/api/projects/${partial.id}`)).json();
   assert.equal(recovered.status,'Ready');
   assert.equal((await counts()).docling_calls-partialCounts.docling_calls,2);

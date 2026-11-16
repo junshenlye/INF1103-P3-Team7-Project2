@@ -60,7 +60,7 @@ The app exposes authoritative upload/form bounds at `GET /api/limits`. Defaults 
 
 1. Name a trimester and add modules with their source documents to the browser's submission bucket.
 2. Review the documents, then build the assessment schedule.
-3. Follow processing progress. Validated results can appear while other documents are still being processed.
+3. Follow processing progress. The schedule opens once all documents finish processing and final validation completes. If some documents fail, successful results remain available with recovery options for the failed sources.
 4. Select an assessment to inspect its cited source text and original. Highlights are shown when valid page coordinates are available.
 5. For unresolved documents, retry the failed work or supply a clearer replacement.
 

@@ -150,18 +150,23 @@ function recoveryDocuments() {
   const running = project.status === 'Processing';
   return `<section class="document-progress recovery-documents" aria-label="Document recovery"><h3>Source documents</h3><ul class="document-progress-list">${documents.map(doc => {
     const active = ['queued','running'].includes(doc.execution);
-    const failed = doc.execution === 'failed' || ['failed','interrupted','not_processed'].includes(doc.state);
+    const failed = !active && (doc.execution === 'failed' || ['failed','interrupted','not_processed'].includes(doc.state));
     const status = active ? (doc.execution === 'queued' ? 'Queued' : 'Processing') : failed ? 'Needs attention' : doc.inference === 'understood' ? 'Processed' : 'Review needed';
     const selected = pendingReplacements.get(doc.document_id);
     const issues = [...(doc.issues || []), ...(project.issues || []).filter(issue => issue.document_id === doc.document_id)];
     const messages = [...new Set(issues.map(issue => issue.message))];
     const locked = running ? 'data-disabled="true" disabled' : '';
-    return `<li class="document-progress-item ${active ? 'is-active' : ''}" data-document-id="${e(doc.document_id)}" data-document-state="${e(doc.state)}"><div class="recovery-document-head"><span class="document-progress-name"><strong>${e(doc.filename)}</strong><small>${e(doc.module_title)}</small></span><span class="recovery-status ${failed ? 'needs-attention' : ''}" role="status">${active ? '<i class="recovery-spinner" aria-hidden="true"></i>' : ''}${status}</span></div>${messages.length ? `<p class="recovery-explanation">${e(messages.join(' '))}</p>` : failed ? '<p class="recovery-explanation">We couldn’t finish extracting this document. Retry the saved file or choose a replacement.</p>' : ''}${(doc.uncertainties || []).map(note => `<p class="recovery-explanation">${e(note)}</p>`).join('')}<div class="recovery-actions"><a href="${e(doc.original_url || `/api/documents/${doc.document_id}/original`)}" target="_blank" rel="noopener">View original ↗</a><a href="/documents?project=${e(project.id)}&document=${e(doc.document_id)}">Extracted text</a>${doc.retryable ? button('Retry document', 'retry-document', `data-document="${e(doc.document_id)}" data-generation="${doc.generation}" ${locked}`) : ''}${project.coverage !== 'complete' && (failed || doc.retryable || doc.inference !== 'understood') ? `<label class="replacement-label">Choose replacement<input type="file" accept=".pdf,.png,.jpg,.jpeg" data-replace-document="${e(doc.document_id)}" data-generation="${doc.generation}" aria-label="Replace ${e(doc.filename)}" ${locked}></label>` : ''}</div>${selected ? `<div class="replacement-review"><p>Replace <strong>${e(doc.filename)}</strong> with <strong>${e(selected.file.name)}</strong> (${Math.ceil(selected.file.size/1024)} KB)?</p><p>Existing assessments stay visible until the replacement is processed. They may be out of date.</p>${button('Upload replacement','confirm-replacement',`data-document="${e(doc.document_id)}" ${locked}`,'primary')}${button('Cancel','cancel-replacement',`data-document="${e(doc.document_id)}"`)}</div>` : ''}</li>`;
+    return `<li class="document-progress-item ${active ? 'is-active' : ''}" data-document-id="${e(doc.document_id)}" data-document-state="${e(doc.state)}"><div class="recovery-document-head"><span class="document-progress-name"><strong>${e(doc.filename)}</strong><small>${e(doc.module_title)}</small></span><span class="recovery-status ${failed ? 'needs-attention' : ''}" role="status">${active ? '<i class="recovery-spinner" aria-hidden="true"></i>' : ''}${status}</span></div>${messages.length ? `<p class="recovery-explanation">${e(messages.join(' '))}</p>` : failed ? '<p class="recovery-explanation">We couldn’t finish extracting this document. Retry the saved file or choose a replacement.</p>' : ''}${(doc.uncertainties || []).map(note => `<p class="recovery-explanation">${e(note)}</p>`).join('')}<div class="recovery-actions"><a href="${e(doc.original_url || `/api/documents/${doc.document_id}/original`)}" target="_blank" rel="noopener">View original ↗</a><a href="/documents?project=${e(project.id)}&document=${e(doc.document_id)}">Extracted text</a>${doc.retryable ? button('Retry document', 'retry-document', `data-document="${e(doc.document_id)}" data-generation="${doc.generation}" ${locked}`) : ''}${!active && project.coverage !== 'complete' && (failed || doc.retryable || doc.inference !== 'understood') ? `<label class="replacement-label">Choose replacement<input type="file" accept=".pdf,.png,.jpg,.jpeg" data-replace-document="${e(doc.document_id)}" data-generation="${doc.generation}" aria-label="Replace ${e(doc.filename)}" ${locked}></label>` : ''}</div>${selected ? `<div class="replacement-review"><p>Replace <strong>${e(doc.filename)}</strong> with <strong>${e(selected.file.name)}</strong> (${Math.ceil(selected.file.size/1024)} KB)?</p><p>Existing assessments stay visible until the replacement is processed. They may be out of date.</p>${button('Upload replacement','confirm-replacement',`data-document="${e(doc.document_id)}" ${locked}`,'primary')}${button('Cancel','cancel-replacement',`data-document="${e(doc.document_id)}"`)}</div>` : ''}</li>`;
   }).join('')}</ul>${running ? '<p class="recovery-explanation">Processing continues. You can use the schedule while you wait. Other recovery actions become available when processing finishes.</p>' : ''}</section>`;
 }
 function sourceIssue() {
   const project = state.project;
   const issues = project?.issues || [];
+  if (project?.status === 'Processing') {
+    const documents = project.documents || [];
+    const completed = documents.filter(doc => doc.execution === 'succeeded').length;
+    return `<section class="coverage-notice processing-notice" aria-label="Document processing progress"><div class="coverage-heading"><span class="recovery-spinner" aria-hidden="true"></span><div><p class="issue-kicker">Processing continues</p><h2>Your documents are still processing</h2><p>${project.stale ? 'Previous results may be out of date while the updated documents are processed.' : 'Completed assessments are available below. The schedule will update automatically as the remaining documents finish.'}</p></div><span class="coverage-count">${completed} of ${documents.length} processed</span></div><details class="recovery-disclosure"><summary>View document progress</summary>${recoveryDocuments()}</details></section>`;
+  }
   if (!issues.length && project?.coverage !== 'partial') return '';
   if (project.coverage !== 'partial') return `<section class="processing-issue source-issue" aria-label="Source availability"><div class="issue-copy"><h2>Some original documents are unavailable</h2><p>The schedule and saved source text remain available.</p><ul>${issues.map(issue => `<li>${e(issue.message)}</li>`).join('')}</ul></div></section>`;
   const unresolved = (project.documents || []).filter(doc => doc.execution !== 'succeeded' || doc.inference !== 'understood' || doc.issues?.length);
@@ -262,7 +267,7 @@ function selectProject(project) {
   }
   state.project = project; state.schedule = project.schedule;
   if (project.documents) state.progress = { documents: project.documents, total_documents: project.documents.length, extracted_documents: project.documents.filter(d => d.state === 'extracted').length };
-  state.step = project.status === 'Created' ? 'upload' : project.schedule ? 'schedule' : ['Failed', 'Interrupted', 'Partial', 'Ready'].includes(project.status) ? 'failure' : 'processing';
+  state.step = project.status === 'Created' ? 'upload' : project.status === 'Processing' ? 'processing' : project.schedule ? 'schedule' : ['Failed', 'Interrupted', 'Partial', 'Ready'].includes(project.status) ? 'failure' : 'processing';
   if (project.status !== 'Created') resetInput();
 }
 async function waitForVisiblePage() {
@@ -285,12 +290,6 @@ async function waitForJob(jobId, token) {
       const progressChanged = JSON.stringify(state.progress) !== JSON.stringify(job.progress || null);
       state.progress = job.progress || null;
       if (!['queued', 'running'].includes(job.status)) return job;
-      if (state.schedule || progressChanged && state.progress?.extracted_documents) {
-        const snapshot = await request(`/api/projects/${state.project.id}`); assertCurrent(token);
-        if (snapshot.schedule && (state.busy || JSON.stringify(snapshot) !== JSON.stringify(state.project))) {
-          selectProject(snapshot); state.busy = null; render();
-        }
-      }
       const detail = processingFeedback(job.stage, state.progress?.documents || []);
       if (state.busy && (state.busy.detail !== detail || state.busy.stage !== job.stage || progressChanged)) {
         state.busy.detail = detail; state.busy.stage = job.stage; showBusy();
@@ -312,10 +311,10 @@ async function refreshProject(id) {
   if (wasProcessing && project.status === 'Ready') await confirmCompletion(token);
   selectProject(project);
   if (state.project.status === 'Processing') {
-    state.busy = state.schedule ? null : { label: 'Processing your documents…', detail: 'Your submission is saved. Checking processing status…' };
+    state.busy = { label: 'Processing your documents…', detail: 'Your submission is saved. Checking processing status…' };
     render(); await waitForJob(state.project.job_id, token);
     const terminal = await request(`/api/projects/${id}`); assertCurrent(token);
-    if (terminal.status === 'Ready' && !state.schedule) await confirmCompletion(token);
+    if (terminal.status === 'Ready') await confirmCompletion(token);
     selectProject(terminal);
   } else if (['Failed', 'Interrupted'].includes(project.status) && project.job_id) {
     const job = await request(`/api/jobs/${project.job_id}`); assertCurrent(token); state.progress = job.progress || null;
