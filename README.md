@@ -80,7 +80,9 @@ OPENAI_API_KEY=your-api-key
 OPENAI_MODEL=your-model
 ```
 
-Use a model that supports **strict JSON Schema structured outputs**. These settings are required to process documents. Keep your key in `.env`, which is excluded from Git.
+Use a model that supports **strict JSON Schema structured outputs**. Document processing requires an API key and model. Keep your key in `.env`, which is excluded from Git.
+
+If your configuration uses provider-specific settings, a non-empty `GPT_API_KEY` or `GPT_MODEL` overrides the corresponding `OPENAI_*` value. Set `GPT_BASE_URL` to your provider’s OpenAI-compatible API base URL if it differs from the default (`https://api.openai.com/v1`).
 
 ### 3. Start Stackplan
 
